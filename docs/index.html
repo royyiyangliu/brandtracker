@@ -85,6 +85,7 @@
     <div class="field"><label>价格下限（中国价 ¥）</label><input id="f-min" type="number" min="0" placeholder="不限"></div>
     <div class="field"><label>价格上限（中国价 ¥）</label><input id="f-max" type="number" min="0" placeholder="不限"></div>
     <div class="field"><label>搜索（品名 / 货号）</label><input id="f-q" class="search" type="text" placeholder="如 quatre / 戒指 / JRG03330"></div>
+    <div id="t-usname" class="toggle" title="显示「品名（美国）」列">☐ 显示美国品名</div>
     <div id="t-orig" class="toggle" title="额外显示各国当地货币原价">☐ 显示原价</div>
     <button id="reset" class="btn-reset">重置</button>
   </div>
@@ -110,12 +111,12 @@
 const CNAME = {CN:"中国",JP:"日本",KR:"韩国",HK:"香港",SG:"新加坡",US:"美国",FR:"法国"};
 const CSHORT= {CN:"中",JP:"日",KR:"韩",HK:"港",SG:"新",US:"美",FR:"法"};
 const SYM   = {USD:"$",SGD:"S$",HKD:"HK$",JPY:"¥",KRW:"₩",EUR:"€",CNY:"¥"};
-let DATA=null, CNY=[], CMP=[], showOrig=false, sortKey=null, sortDir=1;
+let DATA=null, CNY=[], CMP=[], showOrig=false, showUsName=false, sortKey=null, sortDir=1;
 
 const fmt = n => n==null ? "" : n.toLocaleString("en-US");
 // 以「万」为单位展示金额，保留 2 位小数（如 123456 -> 12.35万）。
-const fmtWan = n => n==null ? "" :
-  (n/10000).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})+"万";
+const fmtWan = (n,d=1) => n==null ? "" :
+  (n/10000).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d})+"万";
 // 把 UTC 时间（run_ts 形如 "2026-06-14 14:22:44"，或汇率源的 RFC 字符串）
 // 转成北京时间（UTC+8）并格式化为「北京时间 2026年6月14日 22:40」。
 function fmtBeijing(input){
@@ -187,18 +188,18 @@ function renderStats(rows){
 }
 
 function buildHead(){
-  const span = 6 + CNY.length + CMP.length + (showOrig?CNY.length:0);
+  const txtCols = showUsName?6:5;
   let g = `<tr class="groups">
-    <th class="grp" colspan="6"></th>
+    <th class="grp" colspan="${txtCols}"></th>
     <th class="grp sep" colspan="${CNY.length}">人民币价 ¥（换算）</th>
     <th class="grp sep" colspan="${CMP.length}">相对中国价差</th>`;
   if(showOrig) g+=`<th class="grp sep" colspan="${CNY.length}">原价（当地货币）</th>`;
   g+=`</tr>`;
   let c = `<tr class="cols">
     <th class="txt" data-k="brand">品牌</th>
-    <th class="txt" data-k="category">品类</th>
-    <th class="txt" data-k="name_us">品名（美国）</th>
-    <th class="txt" data-k="name_cn">品名（中国）</th>
+    <th class="txt" data-k="category">品类</th>`;
+  if(showUsName) c+=`<th class="txt" data-k="name_us">品名（美国）</th>`;
+  c+=`<th class="txt" data-k="name_cn">品名（中国）</th>
     <th class="txt" data-k="size">尺寸</th>
     <th class="txt" data-k="ref">货号</th>`;
   CNY.forEach((c2,i)=> c+=`<th class="${i===0?'sep':''}" data-k="cny:${c2}">${CSHORT[c2]}</th>`);
@@ -237,7 +238,7 @@ function render(){
     const minCny=Math.min(...Object.values(p.cny).filter(v=>v!=null).concat([Infinity]));
     let tds=`<td class="txt">${p.brand}</td>`+
             `<td class="txt"><span class="cat-chip">${p.category}</span></td>`+
-            `<td class="txt">${p.name_us||'<span class="muted">—</span>'}</td>`+
+            (showUsName?`<td class="txt">${p.name_us||'<span class="muted">—</span>'}</td>`:``)+
             `<td class="txt">${p.name_cn||'<span class="muted">—</span>'}</td>`+
             `<td class="txt">${p.size||''}</td>`+
             `<td class="ref">${p.ref}</td>`;
@@ -249,7 +250,7 @@ function render(){
     CMP.forEach((c,i)=> tds+=`<td class="${i===0?'sep':''}">${pctCell(diff(p,c))}</td>`);
     if(showOrig) CNY.forEach((c,i)=>{
       const l=p.local[c];
-      tds+=`<td class="${i===0?'sep ':''}muted-cell">${l?(SYM[l[1]]||'')+fmtWan(l[0]):'<span class="muted">—</span>'}</td>`;
+      tds+=`<td class="${i===0?'sep ':''}muted-cell">${l?(SYM[l[1]]||'')+fmtWan(l[0],2):'<span class="muted">—</span>'}</td>`;
     });
     return `<tr>${tds}</tr>`;
   }).join("");
@@ -263,6 +264,12 @@ function initControls(){
   el("f-brand").innerHTML=`<option value="">全部</option>`+brands.map(b=>`<option>${b}</option>`).join("");
   el("f-cat").innerHTML=`<option value="">全部</option>`+cats.map(c=>`<option>${c}</option>`).join("");
   ["f-brand","f-cat","f-min","f-max","f-q"].forEach(id=> el(id).addEventListener("input",render));
+  el("t-usname").addEventListener("click",()=>{
+    showUsName=!showUsName;
+    el("t-usname").classList.toggle("on",showUsName);
+    el("t-usname").textContent=(showUsName?"☑":"☐")+" 显示美国品名";
+    buildHead(); render();
+  });
   el("t-orig").addEventListener("click",()=>{
     showOrig=!showOrig;
     el("t-orig").classList.toggle("on",showOrig);
