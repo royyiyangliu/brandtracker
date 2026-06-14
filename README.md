@@ -32,7 +32,7 @@ config/<brand>.yaml   各国 locale / 货币 / 列表页 URL
 | 日本 JP | `ja_jp` | JPY | ✅ |
 | 韩国 KR | `ko` | KRW | ✅ |
 | 法国 FR | `fr_fr` | EUR | ✅ |
-| 中国 CN | `boucheron.cn` | CNY | ⏳ 待接入（见下） |
+| 中国 CN | `boucheron.cn` (`cn_zh`) | CNY | ✅（深链接，无需代理） |
 
 最新对比见 [`output/latest.md`](output/latest.md)。
 
@@ -54,8 +54,10 @@ xvfb-run -a python -m src.run config/boucheron.yaml   # 无显示环境用 xvfb-
 - **反爬**：官网由 Akamai Bot Manager 保护，普通 HTTP 请求返回 403；本项目用真实
   Chromium 指纹绕过，目前无需代理。若 GitHub Actions 的数据中心 IP 被拦，需接入
   住宅代理（在 `scraper.py` 的 `launch`/`new_context` 中加 `proxy=` 并用仓库 Secret 注入）。
-- **中国大陆**：`boucheron.cn` 对非中国 IP 返回 403，需中国本地住宅代理才能抓，已在
-  config 中 `enabled: false` 留作 TODO。
+- **中国大陆**：`boucheron.cn`（阿里云 ESA）根路径会把非中国 IP geo 跳转到 .com，
+  但 `cn_zh` 本地化深链接可直接访问、价格本就是 CNY，**当前无需代理**。隐患：从被
+  识别为中国的 IP 访问可能仍跳转；GitHub Actions（美国 IP）跑时需验证，若被跳转
+  则该市场仍需中国住宅代理。
 - **价格口径**：抓的是各国官网显示价（部分市场如 SG/HK 经 Global-e 跨境，价格可能含
   跨境加价，未必等于当地门店真实零售价）。
 - **品类范围**：目前只抓 Quatre 系列列表页（戒指为主）。扩展到项链/手镯或其他品牌，
