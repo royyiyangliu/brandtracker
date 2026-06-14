@@ -1,0 +1,38 @@
+name: Weekly price scrape
+
+on:
+  schedule:
+    # Every Monday 02:00 UTC
+    - cron: "0 2 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Scrape and build report
+        run: xvfb-run -a python -m src.run config/boucheron.yaml
+
+      # NOTE: GitHub-hosted runners use datacenter IPs that Akamai may block.
+      # If runs start returning 403, route Playwright through a residential proxy
+      # (set PROXY_SERVER/PROXY_USER/PROXY_PASS secrets and wire into scraper.py).
+
+      - name: Commit updated data and report
+        run: |
+          git config user.name  "brandtracker-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f data/prices.db output/latest.md
+          git commit -m "chore: weekly price snapshot $(date -u +%Y-%m-%d)" || echo "no changes"
+          git push || echo "push skipped"

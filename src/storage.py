@@ -1,0 +1,75 @@
+"""SQLite persistence for scraped observations.
+
+Each weekly run appends a batch of observations stamped with a run timestamp, so
+price history is preserved and trends can be charted later.
+"""
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+DB_PATH = Path(__file__).resolve().parent.parent / "data" / "prices.db"
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS observations (
+    run_ts       TEXT    NOT NULL,
+    brand        TEXT    NOT NULL,
+    collection   TEXT    NOT NULL,
+    country      TEXT    NOT NULL,
+    currency     TEXT    NOT NULL,
+    ref          TEXT    NOT NULL,
+    name         TEXT,
+    local_price  INTEGER,
+    cny_price    REAL,
+    url          TEXT,
+    PRIMARY KEY (run_ts, country, ref)
+);
+CREATE INDEX IF NOT EXISTS idx_obs_ref ON observations(ref);
+CREATE INDEX IF NOT EXISTS idx_obs_run ON observations(run_ts);
+"""
+
+
+def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.executescript(_SCHEMA)
+    return conn
+
+
+def save_observations(conn: sqlite3.Connection, run_ts: str, rows: list[dict]) -> int:
+    payload = [
+        (
+            run_ts,
+            r["brand"],
+            r["collection"],
+            r["country"],
+            r["currency"],
+            r["ref"],
+            r.get("name"),
+            r.get("local_price"),
+            r.get("cny_price"),
+            r.get("url"),
+        )
+        for r in rows
+    ]
+    conn.executemany(
+        """INSERT OR REPLACE INTO observations
+           (run_ts, brand, collection, country, currency, ref, name,
+            local_price, cny_price, url)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        payload,
+    )
+    conn.commit()
+    return len(payload)
+
+
+def latest_run_ts(conn: sqlite3.Connection) -> str | None:
+    row = conn.execute("SELECT MAX(run_ts) AS ts FROM observations").fetchone()
+    return row["ts"] if row else None
+
+
+def load_run(conn: sqlite3.Connection, run_ts: str) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM observations WHERE run_ts = ?", (run_ts,)
+    ).fetchall()

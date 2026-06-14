@@ -1,0 +1,48 @@
+# Boucheron — Quatre collection, global price tracking.
+#
+# Cross-country join key is the product reference (e.g. JRG03330), which appears
+# in every market's product-detail URL and is locale-independent. Prices are read
+# straight from each market's collection page (the price the official site shows).
+brand: Boucheron
+collection: Quatre
+
+countries:
+  - code: US
+    locale: us
+    currency: USD
+    url: https://www.boucheron.com/us/jewelry/jewelry-collection/quatre.html
+
+  - code: SG
+    locale: sg_en
+    currency: SGD
+    url: https://www.boucheron.com/sg_en/jewelry/jewelry-collection/quatre.html
+
+  - code: HK
+    locale: hk_en
+    currency: HKD
+    url: https://www.boucheron.com/hk_en/jewelry/jewelry-collection/quatre.html
+
+  - code: JP
+    locale: ja_jp
+    currency: JPY
+    url: https://www.boucheron.com/ja_jp/jewelry/jewelry-collection/quatre.html
+
+  - code: KR
+    locale: ko
+    currency: KRW
+    url: https://www.boucheron.com/ko/jewelry/jewelry-collection/quatre.html
+
+  - code: FR
+    locale: fr_fr
+    currency: EUR
+    url: https://www.boucheron.com/fr_fr/joaillerie/joaillerie-par-collection/quatre.html
+
+  # Mainland China is served from boucheron.cn, which returns HTTP 403 to
+  # non-China IPs (geo-fence / Akamai). Enable once a China-based residential
+  # proxy is wired in (see README "China" note).
+  - code: CN
+    locale: cn
+    currency: CNY
+    url: https://www.boucheron.cn/
+    enabled: false
+    note: "Requires a China-based residential proxy (geo-fenced, HTTP 403)."
