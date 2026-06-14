@@ -1,0 +1,39 @@
+name: Daily FX refresh
+
+# 抓取每周一跑（weekly.yml，北京时间周一 10:00 已含汇率更新）。
+# 本工作流在**其余六天**北京时间 10:00（02:00 UTC）只刷新汇率，
+# 用最新汇率重算最近一次抓取的 CNY 价，并刷新报告与前端数据。
+on:
+  schedule:
+    # 02:00 UTC = 北京时间 10:00；周日(0)、周二~周六(2-6)，跳过周一(1，由 weekly.yml 负责)
+    - cron: "0 2 * * 0,2,3,4,5,6"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-fx:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 只换汇率，无需浏览器/playwright，装个 requests 即可。
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Refresh FX and rebuild outputs
+        run: python -m src.update_fx
+
+      - name: Commit refreshed data and outputs
+        run: |
+          git config user.name  "brandtracker-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f data/prices.db output/latest.md docs/data.json
+          git commit -m "chore: daily FX refresh $(date -u +%Y-%m-%d)" || echo "no changes"
+          git push || echo "push skipped"
