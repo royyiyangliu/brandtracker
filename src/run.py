@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from . import fx, report, storage
+from . import export_web, fx, report, storage
 
 
 def main(config_path: str) -> int:
@@ -45,7 +45,10 @@ def main(config_path: str) -> int:
     )
     path = report.write_report(md, run_ts)
     print(f"Report written to {path}")
-    print("\n" + md)
+
+    # 5. export JSON for the static frontend (GitHub Pages)
+    web = export_web.export(conn, run_ts, rates.get("updated", ""))
+    print(f"Web data written to {web}")
     return 0
 
 

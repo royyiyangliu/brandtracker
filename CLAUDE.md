@@ -28,7 +28,10 @@ brandtracker/
 │   └── run.py                 # 编排器：scrape → fx → store → report
 ├── .github/workflows/weekly.yml  # 每周 cron + push 触发，跑完回写数据
 ├── data/prices.db             # SQLite（被 CI 用 `git add -f` 回写，保留历史）
-└── output/latest.md           # 最新对比报告
+├── output/latest.md           # 最新对比报告
+└── docs/                      # GitHub Pages 静态前端
+    ├── index.html             # 比价页（筛选/搜索/价差统计/显示原价）
+    └── data.json              # 由 src/export_web.py 从最新 run 导出（前端数据源）
 ```
 
 ## 3. 数据流（`python -m src.run config/<brand>.yaml`）
@@ -181,6 +184,14 @@ xvfb-run -a python -m src.run config/boucheron.yaml   # 无显示环境用 xvfb-
 - **汇率**：`open.er-api.com`（免费、无 key、每日更新、中间价）。要更权威换 ECB 或带 key 的源即可（只改 `fx.py`）。
 - **报告体量**：`latest.md` 现已 540 行，作为人看的报告偏大——这是该上前端的信号（前端直接读 SQLite，支持按品类/货号筛选、中美双语名）。
 - **手表**未纳入（站点有 `watches/watches-by-category/*`，需要可加进 config）。
+
+## 12. 前端（GitHub Pages）
+
+- 纯静态：`docs/index.html`（内联 CSS/JS）fetch `docs/data.json`，全部筛选/对比在浏览器端完成。
+- `src/export_web.py` 从最新 run 导出 `docs/data.json`（每个 ref 一条：品牌/品类/双语名/尺寸/货号 + 各国当地原价与 CNY 价）；已接进 `run.py`，每周自动刷新；CI 回写时 `git add docs/data.json`。
+- 列顺序：人民币价按 **中日韩港新美法**；价差列（相对中国）按 **日韩港新美法**；勾选「显示原价」追加 7 国当地货币原价列。
+- 价格段筛选基于**中国价**（无中国价则用各国最低 CNY）。尺寸是从 slug/名称**尽力解析**（`如有`），与品类的「来自配置」不同，仅作展示。
+- **上线方式**：仓库 Settings → Pages → Source = Deploy from a branch → `main` / `/docs`。站点：`https://royyiyangliu.github.io/brandtracker/`。（无 Pages 管理 API/工具，需手动开一次。）
 
 ## 11. 当前数据快照（2026-06-14）
 

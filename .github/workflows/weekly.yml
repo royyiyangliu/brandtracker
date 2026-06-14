@@ -8,10 +8,11 @@ on:
   push:
     branches:
       - main
-    # Don't re-trigger on the bot's own data/report commits or doc edits.
+    # Don't re-trigger on the bot's own data/report commits, docs, or doc edits.
     paths-ignore:
       - "data/**"
       - "output/**"
+      - "docs/**"
       - "**/*.md"
 
 permissions:
@@ -44,6 +45,6 @@ jobs:
         run: |
           git config user.name  "brandtracker-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add -f data/prices.db output/latest.md
+          git add -f data/prices.db output/latest.md docs/data.json
           git commit -m "chore: weekly price snapshot $(date -u +%Y-%m-%d)" || echo "no changes"
           git push || echo "push skipped"
