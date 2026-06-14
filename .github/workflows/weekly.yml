@@ -5,15 +5,8 @@ on:
     # Every Monday 02:00 UTC
     - cron: "0 2 * * 1"
   workflow_dispatch: {}
-  push:
-    branches:
-      - main
-    # Don't re-trigger on the bot's own data/report commits, docs, or doc edits.
-    paths-ignore:
-      - "data/**"
-      - "output/**"
-      - "docs/**"
-      - "**/*.md"
+  # 不再用 push 触发：代码改动 push 到 main 不会再自动跑全量抓取，
+  # 避免频繁改仓库时反复爬。需要立即跑就在 Actions 页手动 Run workflow。
 
 permissions:
   contents: write

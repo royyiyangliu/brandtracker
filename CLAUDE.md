@@ -137,7 +137,7 @@ URL 拼装在 `scraper.build_targets()`：`{base}/{category_path}/{slug}.html`�
 ## 7. 自动化 / 分支
 
 - **默认/工作分支：`main`**（用户明确要求从 main 跑；早期开发分支 `claude/global-price-comparison-scraper-*` 已不再用）。
-- `.github/workflows/weekly.yml`：`schedule`（每周一 02:00 UTC）+ `workflow_dispatch` + `push`（到 main，`paths-ignore: data/** output/**` 防止回写自触发）。`permissions: contents: write` 让跑完的数据能 `git push` 回 main。`timeout-minutes: 45`。
+- `.github/workflows/weekly.yml`：`schedule`（每周一 02:00 UTC）+ `workflow_dispatch`。**已移除 push 触发**（用户要求：频繁改代码 push 到 main 时不再自动跑全量抓取，避免反复爬；要立即跑就去 Actions 页手动 Run workflow）。`permissions: contents: write` 让跑完的数据能 `git push` 回 main。`timeout-minutes: 45`。
 - runner 上：`pip install -r requirements.txt` + `playwright install --with-deps chromium`，然后 `xvfb-run -a python -m src.run config/boucheron.yaml`，最后把 `data/prices.db` + `output/latest.md` 提交回仓库（机器人提交 "weekly price snapshot"）。
 - ⚠️ 全新仓库里光有 `workflow_dispatch` 不会注册工作流，需要一次含工作流文件的 `push` 才激活（已激活）。
 
