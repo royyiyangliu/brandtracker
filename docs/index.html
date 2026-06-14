@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>全球奢侈品比价</title>
+<style>
+  :root{
+    --bg:#faf9f7; --panel:#fff; --ink:#1c1b19; --muted:#7a756c;
+    --line:#e7e3dc; --accent:#8a6d3b; --cheap:#0a7d4d; --dear:#c0392b;
+    --chip:#f0ece4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:13px;line-height:1.4}
+  header{padding:18px 22px 8px}
+  h1{margin:0 0 4px;font-size:20px;font-weight:700;letter-spacing:.5px}
+  .sub{color:var(--muted);font-size:12px}
+  .sub b{color:var(--ink);font-weight:600}
+  .wrap{padding:0 22px 40px}
+
+  .controls{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;margin:10px 0}
+  .field{display:flex;flex-direction:column;gap:3px}
+  .field label{font-size:11px;color:var(--muted)}
+  select,input{font:inherit;padding:6px 8px;border:1px solid var(--line);
+    border-radius:7px;background:#fff;color:var(--ink)}
+  input[type=number]{width:104px}
+  .search{width:230px}
+  .toggle{display:flex;align-items:center;gap:6px;cursor:pointer;
+    padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;user-select:none}
+  .toggle.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn-reset{padding:7px 10px;border:1px solid var(--line);border-radius:7px;
+    background:#fff;cursor:pointer;color:var(--muted)}
+
+  .stats{background:#fff;border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:10px;padding:10px 14px;margin-bottom:10px}
+  .stats .note{color:var(--muted);font-size:11px;margin-bottom:6px}
+  .stat-items{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline}
+  .stat-items .n{font-size:15px;font-weight:700}
+  .stat-c{display:inline-flex;gap:5px;align-items:baseline}
+  .stat-c .lbl{color:var(--muted);font-size:11px}
+  .pct{font-variant-numeric:tabular-nums;font-weight:600}
+  .pos{color:var(--dear)} .neg{color:var(--cheap)} .zero{color:var(--muted)}
+
+  .tablebox{overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;max-height:74vh}
+  table{border-collapse:separate;border-spacing:0;width:100%;font-variant-numeric:tabular-nums}
+  th,td{padding:6px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+  th{position:sticky;top:0;background:#f4f1ea;z-index:2;font-weight:600;font-size:11px;
+    color:#5b564d;cursor:pointer}
+  th.grp{top:0;background:#ece7dd;text-align:center;border-bottom:1px solid var(--line)}
+  thead tr.groups th{position:sticky;top:0}
+  thead tr.cols th{position:sticky;top:26px}
+  td.txt,th.txt{text-align:left;white-space:normal}
+  td.ref{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--muted)}
+  .cat-chip{background:var(--chip);border-radius:5px;padding:1px 7px;font-size:11px}
+  tbody tr:hover{background:#fbf8f2}
+  .min{font-weight:700;color:var(--accent)}
+  .muted{color:#bdb7ab}
+  .sep{border-left:2px solid var(--line)}
+  .count-foot{color:var(--muted);font-size:12px;padding:8px 2px}
+  a.lk{color:inherit;text-decoration:none;border-bottom:1px dotted #ccc}
+</style>
+</head>
+<body>
+<header>
+  <h1>全球奢侈品比价</h1>
+  <div class="sub">
+    品牌价格数据更新：<b id="m-brand">—</b>　·　汇率更新：<b id="m-fx">—</b>
+    <span id="m-note"></span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <div class="field"><label>品牌</label><select id="f-brand"></select></div>
+    <div class="field"><label>品类</label><select id="f-cat"></select></div>
+    <div class="field"><label>价格下限（中国价 ¥）</label><input id="f-min" type="number" min="0" placeholder="不限"></div>
+    <div class="field"><label>价格上限（中国价 ¥）</label><input id="f-max" type="number" min="0" placeholder="不限"></div>
+    <div class="field"><label>搜索（品名 / 货号）</label><input id="f-q" class="search" type="text" placeholder="如 quatre / 戒指 / JRG03330"></div>
+    <div id="t-orig" class="toggle" title="额外显示各国当地货币原价">☐ 显示原价</div>
+    <button id="reset" class="btn-reset">重置</button>
+  </div>
+
+  <div class="stats" id="stats">
+    <div class="note">
+      下列数字反映<b>当前筛选结果</b>。「均价差」= 各国商品人民币价相对<b>中国价</b>的平均差距，
+      <span class="neg">负值＝比中国便宜</span>、<span class="pos">正值＝比中国贵</span>（仅统计中国与该国都有价的商品）。
+    </div>
+    <div class="stat-items" id="stat-items"></div>
+  </div>
+
+  <div class="tablebox">
+    <table id="tbl">
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="count-foot" id="foot"></div>
+</div>
+
+<script>
+const CNAME = {CN:"中国",JP:"日本",KR:"韩国",HK:"香港",SG:"新加坡",US:"美国",FR:"法国"};
+const CSHORT= {CN:"中",JP:"日",KR:"韩",HK:"港",SG:"新",US:"美",FR:"法"};
+const SYM   = {USD:"$",SGD:"S$",HKD:"HK$",JPY:"¥",KRW:"₩",EUR:"€",CNY:"¥"};
+let DATA=null, CNY=[], CMP=[], showOrig=false, sortKey=null, sortDir=1;
+
+const fmt = n => n==null ? "" : n.toLocaleString("en-US");
+const el = id => document.getElementById(id);
+
+function priceRef(p){ // value used by the price-range filter & default sort
+  if(p.cny.CN!=null) return p.cny.CN;
+  const v=Object.values(p.cny); return v.length?Math.min(...v):null;
+}
+function diff(p,c){ // % vs China; negative = cheaper than China
+  if(p.cny.CN==null || p.cny[c]==null || p.cny.CN===0) return null;
+  return (p.cny[c]-p.cny.CN)/p.cny.CN*100;
+}
+function pctCell(v){
+  if(v==null) return '<span class="muted">—</span>';
+  const cls = v<-0.5?"neg":(v>0.5?"pos":"zero");
+  const s = (v>0?"+":"")+v.toFixed(0)+"%";
+  return `<span class="pct ${cls}">${s}</span>`;
+}
+
+function currentFilters(){
+  return {
+    brand: el("f-brand").value,
+    cat: el("f-cat").value,
+    min: parseFloat(el("f-min").value),
+    max: parseFloat(el("f-max").value),
+    q: el("f-q").value.trim().toLowerCase(),
+  };
+}
+function applyFilters(){
+  const f=currentFilters();
+  return DATA.products.filter(p=>{
+    if(f.brand && p.brand!==f.brand) return false;
+    if(f.cat && p.category!==f.cat) return false;
+    const pr=priceRef(p);
+    if(!isNaN(f.min) && (pr==null || pr<f.min)) return false;
+    if(!isNaN(f.max) && (pr==null || pr>f.max)) return false;
+    if(f.q){
+      const hay=(p.ref+" "+p.name_us+" "+p.name_cn+" "+p.category).toLowerCase();
+      if(!hay.includes(f.q)) return false;
+    }
+    return true;
+  });
+}
+
+function renderStats(rows){
+  el("stat-items").innerHTML =
+    `<div class="stat-c"><span class="n">${rows.length}</span><span class="lbl">件商品</span></div>` +
+    CMP.map(c=>{
+      const ds=rows.map(p=>diff(p,c)).filter(v=>v!=null);
+      if(!ds.length) return `<div class="stat-c"><span class="lbl">${CNAME[c]}</span> <span class="muted">—</span></div>`;
+      const avg=ds.reduce((a,b)=>a+b,0)/ds.length;
+      return `<div class="stat-c"><span class="lbl">${CNAME[c]}均价差</span> ${pctCell(avg)}</div>`;
+    }).join("");
+}
+
+function buildHead(){
+  const span = 6 + CNY.length + CMP.length + (showOrig?CNY.length:0);
+  let g = `<tr class="groups">
+    <th class="grp" colspan="6"></th>
+    <th class="grp sep" colspan="${CNY.length}">人民币价 ¥（换算）</th>
+    <th class="grp sep" colspan="${CMP.length}">相对中国价差</th>`;
+  if(showOrig) g+=`<th class="grp sep" colspan="${CNY.length}">原价（当地货币）</th>`;
+  g+=`</tr>`;
+  let c = `<tr class="cols">
+    <th class="txt" data-k="brand">品牌</th>
+    <th class="txt" data-k="category">品类</th>
+    <th class="txt" data-k="name_us">品名（美国）</th>
+    <th class="txt" data-k="name_cn">品名（中国）</th>
+    <th class="txt" data-k="size">尺寸</th>
+    <th class="txt" data-k="ref">货号</th>`;
+  CNY.forEach((c2,i)=> c+=`<th class="${i===0?'sep':''}" data-k="cny:${c2}">${CSHORT[c2]}</th>`);
+  CMP.forEach((c2,i)=> c+=`<th class="${i===0?'sep':''}" data-k="cmp:${c2}">${CSHORT[c2]}</th>`);
+  if(showOrig) CNY.forEach((c2,i)=> c+=`<th class="${i===0?'sep':''}" data-k="loc:${c2}">${CSHORT[c2]}</th>`);
+  c+=`</tr>`;
+  el("thead").innerHTML = g+c;
+  el("thead").querySelectorAll("th[data-k]").forEach(th=>{
+    th.onclick=()=>{ const k=th.dataset.k; if(sortKey===k) sortDir*=-1; else {sortKey=k;sortDir=1;} render(); };
+  });
+}
+
+function sortRows(rows){
+  if(!sortKey) return rows;
+  const [pre,c]=sortKey.split(":");
+  const val=p=>{
+    if(pre==="cny") return p.cny[c];
+    if(pre==="cmp") return diff(p,c);
+    if(pre==="loc") return p.local[c]?p.local[c][0]:null;
+    return p[sortKey]||"";
+  };
+  return rows.slice().sort((a,b)=>{
+    let x=val(a),y=val(b);
+    const xn=(x==null||x===""), yn=(y==null||y==="");
+    if(xn&&yn) return 0; if(xn) return 1; if(yn) return -1;
+    if(typeof x==="string") return x.localeCompare(y)*sortDir;
+    return (x-y)*sortDir;
+  });
+}
+
+function render(){
+  let rows=applyFilters();
+  renderStats(rows);
+  rows=sortRows(rows);
+  const body=rows.map(p=>{
+    const minCny=Math.min(...Object.values(p.cny).filter(v=>v!=null).concat([Infinity]));
+    let tds=`<td class="txt">${p.brand}</td>`+
+            `<td class="txt"><span class="cat-chip">${p.category}</span></td>`+
+            `<td class="txt">${p.name_us||'<span class="muted">—</span>'}</td>`+
+            `<td class="txt">${p.name_cn||'<span class="muted">—</span>'}</td>`+
+            `<td class="txt">${p.size||''}</td>`+
+            `<td class="ref">${p.ref}</td>`;
+    CNY.forEach((c,i)=>{
+      const v=p.cny[c];
+      const cls=(v!=null&&v===minCny)?"min":"";
+      tds+=`<td class="${i===0?'sep ':''}${cls}">${v!=null?'¥'+fmt(v):'<span class="muted">—</span>'}</td>`;
+    });
+    CMP.forEach((c,i)=> tds+=`<td class="${i===0?'sep':''}">${pctCell(diff(p,c))}</td>`);
+    if(showOrig) CNY.forEach((c,i)=>{
+      const l=p.local[c];
+      tds+=`<td class="${i===0?'sep ':''}muted-cell">${l?(SYM[l[1]]||'')+fmt(l[0]):'<span class="muted">—</span>'}</td>`;
+    });
+    return `<tr>${tds}</tr>`;
+  }).join("");
+  el("tbody").innerHTML=body;
+  el("foot").textContent=`共 ${DATA.count} 件商品，当前显示 ${rows.length} 件`;
+}
+
+function initControls(){
+  const brands=[...new Set(DATA.products.map(p=>p.brand))].sort();
+  const cats=[...new Set(DATA.products.map(p=>p.category))];
+  el("f-brand").innerHTML=`<option value="">全部</option>`+brands.map(b=>`<option>${b}</option>`).join("");
+  el("f-cat").innerHTML=`<option value="">全部</option>`+cats.map(c=>`<option>${c}</option>`).join("");
+  ["f-brand","f-cat","f-min","f-max","f-q"].forEach(id=> el(id).addEventListener("input",render));
+  el("t-orig").addEventListener("click",()=>{
+    showOrig=!showOrig;
+    el("t-orig").classList.toggle("on",showOrig);
+    el("t-orig").textContent=(showOrig?"☑":"☐")+" 显示原价";
+    buildHead(); render();
+  });
+  el("reset").addEventListener("click",()=>{
+    ["f-brand","f-cat","f-min","f-max","f-q"].forEach(id=> el(id).value="");
+    sortKey=null;sortDir=1; render();
+  });
+}
+
+fetch("./data.json").then(r=>r.json()).then(d=>{
+  DATA=d; CNY=d.cny_order; CMP=d.cmp_order;
+  el("m-brand").textContent=d.brand_updated_utc+" UTC";
+  el("m-fx").textContent=d.fx_updated||"—";
+  initControls(); buildHead(); render();
+}).catch(e=>{
+  el("m-note").textContent=" — 数据加载失败："+e;
+});
+</script>
+</body>
+</html>

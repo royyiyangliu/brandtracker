@@ -1,13 +1,14 @@
 """Playwright-based scraper.
 
-Boucheron sits behind Akamai Bot Manager: plain HTTP clients get HTTP 403, but a
-real headless Chromium with a normal browser fingerprint is served HTTP 200. We
-therefore drive Chromium, let the collection page lazy-load, and read each
-product tile straight from the DOM.
+Boucheron sits behind Akamai Bot Manager (and boucheron.cn behind Alibaba ESA):
+plain HTTP clients get blocked, but a real headless Chromium is served HTTP 200.
+We drive Chromium, let each category landing page lazy-load, and read product
+tiles from the DOM.
 
-A product tile links to a detail page whose URL embeds the reference
-(e.g. .../quatre-classique-xs-ring-jrg03330.html). That reference is the
-locale-independent key used to line products up across countries.
+Category is NOT parsed from the page — it is declared in config. We scrape one
+category landing page at a time, so every product found inherits that page's
+category label. The cross-country join key is the product reference (e.g.
+JRG03330), embedded in every market's product-detail URL.
 """
 from __future__ import annotations
 
@@ -41,12 +42,20 @@ _PRICE_PATTERNS = {
 @dataclass
 class Product:
     brand: str
-    collection: str
+    category: str
     country: str
     currency: str
     ref: str
     name: str
     local_price: int | None
+    url: str
+
+
+@dataclass
+class Target:
+    country: str
+    currency: str
+    category: str   # Chinese display label
     url: str
 
 
@@ -76,76 +85,107 @@ def _clean_name(text: str) -> str:
     return name.strip()
 
 
-_TILE_JS = r"""
-() => {
-    const seen = new Set();
-    const out = [];
-    for (const a of document.querySelectorAll("a[href*='-j']")) {
-        const href = a.getAttribute('href') || '';
-        const m = href.match(/(j[a-z]{2}\d{4,6})/i);
-        if (!m) continue;
-        const ref = m[1].toUpperCase();
-        if (seen.has(ref)) continue;
-        const text = (a.innerText || '').replace(/\s+/g, ' ').trim();
-        if (!text) continue;
-        seen.add(ref);
-        out.push({ ref, href: a.href, text });
+def build_targets(config: dict) -> list[Target]:
+    """Expand the brand config into one Target per (country, category)."""
+    cats = config["categories"]  # canonical_key -> zh label
+    targets: list[Target] = []
+    for c in config["countries"]:
+        base = c["base"].rstrip("/")
+        path = c["category_path"].strip("/")
+        slugs = c.get("slugs", {})
+        for key, label in cats.items():
+            slug = slugs.get(key, key)
+            url = f"{base}/{path}/{slug}.html"
+            targets.append(Target(c["code"], c["currency"], label, url))
+    return targets
+
+
+# The category grid (Magento + Hyvä + Amasty Shopby) shows only 8 items per
+# page and loads the rest via a "see more" button that fetches
+# `?p=N&isAjax=true` — returning JSON {"products": "<grid html>"}. We replicate
+# that inside the established session: page through every p until exhausted,
+# parsing each partial. This captures the full category (e.g. 183 rings) in one
+# pass instead of the first 8.
+_PAGINATE_JS = r"""
+async (base) => {
+    const origin = location.origin;
+    const seen = new Map();
+    const collect = (html) => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        let added = 0;
+        for (const a of doc.querySelectorAll("a[href*='-j']")) {
+            let href = a.getAttribute('href') || '';
+            const m = href.match(/j[a-z]{2}\d{4,6}/i);
+            if (!m) continue;
+            const ref = m[0].toUpperCase();
+            if (seen.has(ref)) continue;
+            if (href.startsWith('/')) href = origin + href;
+            const text = (a.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!text) continue;
+            seen.set(ref, { ref, href, text });
+            added++;
+        }
+        return added;
+    };
+    let page = 1, empty = 0;
+    while (page <= 80) {
+        const url = base + (base.includes('?') ? '&' : '?') + 'p=' + page + '&isAjax=true';
+        let html = '';
+        try {
+            const r = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const ct = r.headers.get('content-type') || '';
+            const body = await r.text();
+            html = ct.includes('json') ? (JSON.parse(body).products || '') : body;
+        } catch (e) { break; }
+        if (collect(html) === 0) { if (++empty >= 2) break; } else empty = 0;
+        page++;
     }
-    return out;
+    return [...seen.values()];
 }
 """
 
 
-def scrape_country(page, brand: str, collection: str, country: dict) -> list[Product]:
-    url = country["url"]
-    page.goto(url, wait_until="domcontentloaded", timeout=45000)
-    page.wait_for_timeout(3000)
-    # lazy-load: scroll the full page a few times
-    for _ in range(8):
-        page.mouse.wheel(0, 4000)
-        page.wait_for_timeout(700)
-
-    raw = page.evaluate(_TILE_JS)
-    products: list[Product] = []
-    for t in raw:
-        products.append(
-            Product(
-                brand=brand,
-                collection=collection,
-                country=country["code"],
-                currency=country["currency"],
-                ref=t["ref"],
-                name=_clean_name(t["text"]),
-                local_price=parse_price(t["text"], country["currency"]),
-                url=t["href"],
-            )
+def scrape_page(page, brand: str, target: Target) -> list[Product]:
+    # Navigate once to establish the session/cookies, then paginate via fetch.
+    page.goto(target.url, wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_timeout(2000)
+    raw = page.evaluate(_PAGINATE_JS, target.url)
+    return [
+        Product(
+            brand=brand,
+            category=target.category,
+            country=target.country,
+            currency=target.currency,
+            ref=t["ref"],
+            name=_clean_name(t["text"]),
+            local_price=parse_price(t["text"], target.currency),
+            url=t["href"],
         )
-    return products
+        for t in raw
+    ]
 
 
 def scrape_brand(config: dict) -> list[dict]:
-    """Scrape every enabled country for a brand config; returns list of dicts."""
+    """Scrape every (country, category) target; returns list of dicts."""
     brand = config["brand"]
-    collection = config["collection"]
+    by_country: dict[str, dict] = {c["code"]: c for c in config["countries"]}
+    targets = build_targets(config)
     results: list[dict] = []
+
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True, args=["--disable-blink-features=AutomationControlled"]
         )
-        for country in config["countries"]:
-            if country.get("enabled", True) is False:
-                print(f"  [{country['code']}] skipped ({country.get('note', 'disabled')})")
-                continue
-            # Fresh context per country: applies the right language headers and
-            # isolates cookies (e.g. Global-e country/currency) between markets.
+        # One context per country (right language headers, isolated cookies).
+        for code, cfg in by_country.items():
             ctx = browser.new_context(
                 user_agent=UA,
                 ignore_https_errors=True,
                 viewport={"width": 1366, "height": 900},
-                locale=country.get("browser_locale", "en-US"),
+                locale=cfg.get("browser_locale", "en-US"),
                 extra_http_headers=(
-                    {"Accept-Language": country["accept_language"]}
-                    if country.get("accept_language")
+                    {"Accept-Language": cfg["accept_language"]}
+                    if cfg.get("accept_language")
                     else {}
                 ),
             )
@@ -153,16 +193,14 @@ def scrape_brand(config: dict) -> list[dict]:
                 "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
             )
             page = ctx.new_page()
-            try:
-                items = scrape_country(page, brand, collection, country)
-                priced = [i for i in items if i.local_price is not None]
-                redirected = page.url and "boucheron.cn" not in page.url and country["code"] == "CN"
-                flag = " (REDIRECTED off .cn!)" if redirected else ""
-                print(f"  [{country['code']}] {len(items)} products, {len(priced)} priced{flag}")
-                results.extend(asdict(i) for i in items)
-            except Exception as e:  # keep going if one country fails
-                print(f"  [{country['code']}] ERROR {type(e).__name__}: {str(e)[:100]}")
-            finally:
-                ctx.close()
+            for t in (t for t in targets if t.country == code):
+                try:
+                    items = scrape_page(page, brand, t)
+                    priced = sum(1 for i in items if i.local_price is not None)
+                    print(f"  [{code}/{t.category}] {len(items)} products, {priced} priced")
+                    results.extend(asdict(i) for i in items)
+                except Exception as e:
+                    print(f"  [{code}/{t.category}] ERROR {type(e).__name__}: {str(e)[:90]}")
+            ctx.close()
         browser.close()
     return results

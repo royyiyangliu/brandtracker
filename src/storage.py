@@ -14,7 +14,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS observations (
     run_ts       TEXT    NOT NULL,
     brand        TEXT    NOT NULL,
-    collection   TEXT    NOT NULL,
+    category     TEXT    NOT NULL,
     country      TEXT    NOT NULL,
     currency     TEXT    NOT NULL,
     ref          TEXT    NOT NULL,
@@ -33,6 +33,10 @@ def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
+    # If an older schema (pre-category) exists, reset it — early data is throwaway.
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(observations)")}
+    if cols and "category" not in cols:
+        conn.execute("DROP TABLE observations")
     conn.executescript(_SCHEMA)
     return conn
 
@@ -42,7 +46,7 @@ def save_observations(conn: sqlite3.Connection, run_ts: str, rows: list[dict]) -
         (
             run_ts,
             r["brand"],
-            r["collection"],
+            r["category"],
             r["country"],
             r["currency"],
             r["ref"],
@@ -55,7 +59,7 @@ def save_observations(conn: sqlite3.Connection, run_ts: str, rows: list[dict]) -
     ]
     conn.executemany(
         """INSERT OR REPLACE INTO observations
-           (run_ts, brand, collection, country, currency, ref, name,
+           (run_ts, brand, category, country, currency, ref, name,
             local_price, cny_price, url)
            VALUES (?,?,?,?,?,?,?,?,?,?)""",
         payload,

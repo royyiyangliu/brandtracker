@@ -11,14 +11,14 @@ from pathlib import Path
 
 import yaml
 
-from . import fx, report, storage
+from . import export_web, fx, report, storage
 
 
 def main(config_path: str) -> int:
     cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     run_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
-    print(f"== {cfg['brand']} / {cfg['collection']} == run {run_ts} (UTC)")
+    print(f"== {cfg['brand']} == run {run_ts} (UTC)")
 
     # 1. scrape (import here so report-only environments don't need playwright)
     from .scraper import scrape_brand
@@ -41,11 +41,14 @@ def main(config_path: str) -> int:
     # 4. report
     stored = storage.load_run(conn, run_ts)
     md = report.render_markdown(
-        run_ts, cfg["brand"], cfg["collection"], rates.get("updated", "?"), stored
+        run_ts, cfg["brand"], rates.get("updated", "?"), stored
     )
     path = report.write_report(md, run_ts)
     print(f"Report written to {path}")
-    print("\n" + md)
+
+    # 5. export JSON for the static frontend (GitHub Pages)
+    web = export_web.export(conn, run_ts, rates.get("updated", ""))
+    print(f"Web data written to {web}")
     return 0
 
 

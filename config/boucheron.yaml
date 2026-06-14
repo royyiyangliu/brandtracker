@@ -1,49 +1,72 @@
-# Boucheron — Quatre collection, global price tracking.
+# Boucheron — global price tracking, scraped BY CATEGORY.
 #
-# Cross-country join key is the product reference (e.g. JRG03330), which appears
-# in every market's product-detail URL and is locale-independent. Prices are read
-# straight from each market's collection page (the price the official site shows).
+# Design: a product's category is NOT parsed from its page. It is declared here.
+# We scrape each market's category landing page (e.g. .../jewelry-category/rings.html);
+# everything found on it inherits that page's category label. This is fully
+# deterministic and brand-agnostic — adding a category or brand means adding
+# config, never touching parsing code.
+#
+# A target URL is composed as:  {country.base}/{country.category_path}/{slug}.html
+# where slug defaults to the canonical category key, overridden per market when
+# the site localises the slug (e.g. France: rings -> bagues).
 brand: Boucheron
-collection: Quatre
+
+# Canonical categories (key) -> Chinese display label.
+categories:
+  rings: 戒指
+  necklaces-pendants: 项链与吊坠
+  bracelets: 手链
+  ankle-bracelet: 脚链
+  earrings: 耳环
+  brooches: 胸针
+  head-jewelry: 发饰
 
 countries:
   - code: US
-    locale: us
     currency: USD
-    url: https://www.boucheron.com/us/jewelry/jewelry-collection/quatre.html
+    base: https://www.boucheron.com/us
+    category_path: jewelry/jewelry-category
 
   - code: SG
-    locale: sg_en
     currency: SGD
-    url: https://www.boucheron.com/sg_en/jewelry/jewelry-collection/quatre.html
+    base: https://www.boucheron.com/sg_en
+    category_path: jewelry/jewelry-category
 
   - code: HK
-    locale: hk_en
     currency: HKD
-    url: https://www.boucheron.com/hk_en/jewelry/jewelry-collection/quatre.html
+    base: https://www.boucheron.com/hk_en
+    category_path: jewelry/jewelry-category
 
   - code: JP
-    locale: ja_jp
     currency: JPY
-    url: https://www.boucheron.com/ja_jp/jewelry/jewelry-collection/quatre.html
+    browser_locale: ja-JP
+    base: https://www.boucheron.com/ja_jp
+    category_path: jewelry/jewelry-category
 
   - code: KR
-    locale: ko
     currency: KRW
-    url: https://www.boucheron.com/ko/jewelry/jewelry-collection/quatre.html
+    browser_locale: ko-KR
+    base: https://www.boucheron.com/ko
+    category_path: jewelry/jewelry-category
 
   - code: FR
-    locale: fr_fr
     currency: EUR
-    url: https://www.boucheron.com/fr_fr/joaillerie/joaillerie-par-collection/quatre.html
+    browser_locale: fr-FR
+    base: https://www.boucheron.com/fr_fr
+    category_path: joaillerie/joaillerie-par-categorie
+    slugs:  # France localises the category slugs
+      rings: bagues
+      necklaces-pendants: colliers-et-pendentifs
+      ankle-bracelet: bracelet-de-cheville
+      earrings: boucles-d-oreilles
+      brooches: broches
+      head-jewelry: bijoux-de-cheveux
 
-  # Mainland China is served from boucheron.cn (Alibaba ESA, not Akamai). The
-  # site root geo-redirects non-China IPs to boucheron.com, but the localized
-  # cn_zh deep links are served directly. Prices are already in CNY (no FX).
-  # NOTE: from a China-detected IP this may still redirect — verify on CI.
+  # Mainland China: boucheron.cn (Alibaba ESA). The cn_zh deep links serve CNY
+  # prices directly; verified reachable from GitHub-hosted runners without a proxy.
   - code: CN
-    locale: cn_zh
     currency: CNY
-    url: https://www.boucheron.cn/cn_zh/jewelry/jewelry-collection/quatre.html
     browser_locale: zh-CN
     accept_language: "zh-CN,zh;q=0.9,en;q=0.8"
+    base: https://www.boucheron.cn/cn_zh
+    category_path: jewelry/jewelry-category
