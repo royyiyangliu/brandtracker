@@ -5,6 +5,13 @@ on:
     # Every Monday 02:00 UTC
     - cron: "0 2 * * 1"
   workflow_dispatch: {}
+  push:
+    branches:
+      - claude/global-price-comparison-scraper-3zn6of
+    # Don't re-trigger on the bot's own data/report commits.
+    paths-ignore:
+      - "data/**"
+      - "output/**"
 
 jobs:
   scrape:
