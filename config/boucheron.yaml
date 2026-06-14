@@ -37,12 +37,13 @@ countries:
     currency: EUR
     url: https://www.boucheron.com/fr_fr/joaillerie/joaillerie-par-collection/quatre.html
 
-  # Mainland China is served from boucheron.cn, which returns HTTP 403 to
-  # non-China IPs (geo-fence / Akamai). Enable once a China-based residential
-  # proxy is wired in (see README "China" note).
+  # Mainland China is served from boucheron.cn (Alibaba ESA, not Akamai). The
+  # site root geo-redirects non-China IPs to boucheron.com, but the localized
+  # cn_zh deep links are served directly. Prices are already in CNY (no FX).
+  # NOTE: from a China-detected IP this may still redirect — verify on CI.
   - code: CN
-    locale: cn
+    locale: cn_zh
     currency: CNY
-    url: https://www.boucheron.cn/
-    enabled: false
-    note: "Requires a China-based residential proxy (geo-fenced, HTTP 403)."
+    url: https://www.boucheron.cn/cn_zh/jewelry/jewelry-collection/quatre.html
+    browser_locale: zh-CN
+    accept_language: "zh-CN,zh;q=0.9,en;q=0.8"

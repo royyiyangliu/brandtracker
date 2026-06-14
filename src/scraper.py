@@ -132,26 +132,37 @@ def scrape_brand(config: dict) -> list[dict]:
         browser = p.chromium.launch(
             headless=True, args=["--disable-blink-features=AutomationControlled"]
         )
-        ctx = browser.new_context(
-            user_agent=UA,
-            ignore_https_errors=True,
-            viewport={"width": 1366, "height": 900},
-            locale="en-US",
-        )
-        ctx.add_init_script(
-            "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
-        )
-        page = ctx.new_page()
         for country in config["countries"]:
             if country.get("enabled", True) is False:
                 print(f"  [{country['code']}] skipped ({country.get('note', 'disabled')})")
                 continue
+            # Fresh context per country: applies the right language headers and
+            # isolates cookies (e.g. Global-e country/currency) between markets.
+            ctx = browser.new_context(
+                user_agent=UA,
+                ignore_https_errors=True,
+                viewport={"width": 1366, "height": 900},
+                locale=country.get("browser_locale", "en-US"),
+                extra_http_headers=(
+                    {"Accept-Language": country["accept_language"]}
+                    if country.get("accept_language")
+                    else {}
+                ),
+            )
+            ctx.add_init_script(
+                "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
+            )
+            page = ctx.new_page()
             try:
                 items = scrape_country(page, brand, collection, country)
                 priced = [i for i in items if i.local_price is not None]
-                print(f"  [{country['code']}] {len(items)} products, {len(priced)} priced")
+                redirected = page.url and "boucheron.cn" not in page.url and country["code"] == "CN"
+                flag = " (REDIRECTED off .cn!)" if redirected else ""
+                print(f"  [{country['code']}] {len(items)} products, {len(priced)} priced{flag}")
                 results.extend(asdict(i) for i in items)
             except Exception as e:  # keep going if one country fails
                 print(f"  [{country['code']}] ERROR {type(e).__name__}: {str(e)[:100]}")
+            finally:
+                ctx.close()
         browser.close()
     return results
