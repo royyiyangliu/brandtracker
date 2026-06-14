@@ -100,34 +100,56 @@ def build_targets(config: dict) -> list[Target]:
     return targets
 
 
-_TILE_JS = r"""
-() => {
-    const seen = new Set();
-    const out = [];
-    for (const a of document.querySelectorAll("a[href*='-j']")) {
-        const href = a.getAttribute('href') || '';
-        const m = href.match(/(j[a-z]{2}\d{4,6})/i);
-        if (!m) continue;
-        const ref = m[1].toUpperCase();
-        if (seen.has(ref)) continue;
-        const text = (a.innerText || '').replace(/\s+/g, ' ').trim();
-        if (!text) continue;
-        seen.add(ref);
-        out.push({ ref, href: a.href, text });
+# The category grid (Magento + Hyvä + Amasty Shopby) shows only 8 items per
+# page and loads the rest via a "see more" button that fetches
+# `?p=N&isAjax=true` — returning JSON {"products": "<grid html>"}. We replicate
+# that inside the established session: page through every p until exhausted,
+# parsing each partial. This captures the full category (e.g. 183 rings) in one
+# pass instead of the first 8.
+_PAGINATE_JS = r"""
+async (base) => {
+    const origin = location.origin;
+    const seen = new Map();
+    const collect = (html) => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        let added = 0;
+        for (const a of doc.querySelectorAll("a[href*='-j']")) {
+            let href = a.getAttribute('href') || '';
+            const m = href.match(/j[a-z]{2}\d{4,6}/i);
+            if (!m) continue;
+            const ref = m[0].toUpperCase();
+            if (seen.has(ref)) continue;
+            if (href.startsWith('/')) href = origin + href;
+            const text = (a.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!text) continue;
+            seen.set(ref, { ref, href, text });
+            added++;
+        }
+        return added;
+    };
+    let page = 1, empty = 0;
+    while (page <= 80) {
+        const url = base + (base.includes('?') ? '&' : '?') + 'p=' + page + '&isAjax=true';
+        let html = '';
+        try {
+            const r = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const ct = r.headers.get('content-type') || '';
+            const body = await r.text();
+            html = ct.includes('json') ? (JSON.parse(body).products || '') : body;
+        } catch (e) { break; }
+        if (collect(html) === 0) { if (++empty >= 2) break; } else empty = 0;
+        page++;
     }
-    return out;
+    return [...seen.values()];
 }
 """
 
 
 def scrape_page(page, brand: str, target: Target) -> list[Product]:
+    # Navigate once to establish the session/cookies, then paginate via fetch.
     page.goto(target.url, wait_until="domcontentloaded", timeout=45000)
-    page.wait_for_timeout(2500)
-    for _ in range(8):  # lazy-load
-        page.mouse.wheel(0, 4000)
-        page.wait_for_timeout(600)
-
-    raw = page.evaluate(_TILE_JS)
+    page.wait_for_timeout(2000)
+    raw = page.evaluate(_PAGINATE_JS, target.url)
     return [
         Product(
             brand=brand,
