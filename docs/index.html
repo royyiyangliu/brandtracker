@@ -159,6 +159,7 @@ function currentFilters(){
 function applyFilters(){
   const f=currentFilters();
   return DATA.products.filter(p=>{
+    if(Object.keys(p.cny).length===0) return false;  // 各国价格全为空的行不显示
     if(f.brand && p.brand!==f.brand) return false;
     if(f.cat && p.category!==f.cat) return false;
     const pr=priceRef(p);
