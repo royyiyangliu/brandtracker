@@ -7,11 +7,14 @@ on:
   workflow_dispatch: {}
   push:
     branches:
-      - claude/global-price-comparison-scraper-3zn6of
+      - main
     # Don't re-trigger on the bot's own data/report commits.
     paths-ignore:
       - "data/**"
       - "output/**"
+
+permissions:
+  contents: write
 
 jobs:
   scrape:
