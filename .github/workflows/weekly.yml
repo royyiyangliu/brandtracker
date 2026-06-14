@@ -8,10 +8,11 @@ on:
   push:
     branches:
       - main
-    # Don't re-trigger on the bot's own data/report commits.
+    # Don't re-trigger on the bot's own data/report commits or doc edits.
     paths-ignore:
       - "data/**"
       - "output/**"
+      - "**/*.md"
 
 permissions:
   contents: write
