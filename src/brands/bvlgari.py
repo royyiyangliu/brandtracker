@@ -68,6 +68,22 @@ def _clean_name(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip()
 
 
+def _norm_ref(raw: str) -> str:
+    """归一货号到跨国统一 join 键，去掉前缀/变体后缀等装饰。
+
+    宝格丽货号有两类：字母前缀+数字（如 AN852260）与纯数字（如 361995）。各国接口会加装饰：
+    - US SCAPI 有时带系列前缀，如 'B-zero1-1-bands-AN852260' → 'AN852260'
+    - CN Magento 有时带变体后缀，如 '361995-E' → '361995'
+    取核心 token：优先「字母(2-4)+数字(5+)」，否则取纯数字(5+)。
+    """
+    raw = (raw or "").strip()
+    m = re.search(r"[A-Za-z]{2,4}\d{5,}", raw)
+    if m:
+        return m.group(0).upper()
+    m = re.search(r"\d{5,}", raw)
+    return m.group(0) if m else raw.upper()
+
+
 # ── SCAPI（US/SG/HK/JP/KR/FR）──────────────────────────────────────────────
 def _scrape_scapi(page, brand, c, cats, cgids) -> list[dict]:
     code = c["code"]
@@ -126,7 +142,7 @@ def _scrape_scapi(page, brand, c, cats, cgids) -> list[dict]:
             hits = j.get("hits") or []
             total = j.get("total", total)
             for h in hits:
-                ref = h.get("productId")
+                ref = _norm_ref(h.get("productId") or "")
                 if not ref or ref in seen:
                     continue
                 seen.add(ref)
@@ -180,7 +196,7 @@ def _scrape_magento(page, brand, c, cats) -> list[dict]:
             items = data.get("productItems") or []
             total_pages = data.get("totalPages", total_pages)
             for it in items:
-                sku = it.get("sku")
+                sku = _norm_ref(it.get("sku") or "")
                 if not sku or sku in seen:
                     continue
                 seen.add(sku)
@@ -209,8 +225,11 @@ def scrape_brand(config: dict) -> list[dict]:
     results: list[dict] = []
 
     with sync_playwright() as p:
+        # --disable-http2：bulgari.com 对部分 locale（尤其 ko-kr）偶发 ERR_HTTP2_PROTOCOL_ERROR，
+        # 关掉 HTTP2 后稳定（KR 实为 SCAPI siteId=KR，之前的失败是 HTTP2 连接错误所致）。
         browser = p.chromium.launch(
-            headless=True, args=["--disable-blink-features=AutomationControlled"]
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled", "--disable-http2"],
         )
         for c in config["countries"]:
             ctx = browser.new_context(

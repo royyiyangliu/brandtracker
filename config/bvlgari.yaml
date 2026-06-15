@@ -60,7 +60,7 @@ countries:
     browser_locale: ko-KR
     accept_language: "ko-KR,ko;q=0.9,en;q=0.8"
     base: https://www.bulgari.com/ko-kr
-    warm_slugs: ["주얼리/반지", "jewellery/rings", "jewelry/rings"]
+    warm_slugs: ["주얼리/네크리스", "주얼리/반지", "jewellery/rings"]
 
   - code: FR
     currency: EUR
