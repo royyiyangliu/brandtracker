@@ -98,7 +98,10 @@ config/<brand>.yaml  ──(adapter 字段)──▶  src/brands/<adapter>.scrap
 
 - **`fx.py`**：`open.er-api.com`（免费、无 key、每日中间价，base=CNY）。`fetch_rates_to_cny()` 拉一次快照；`to_cny(amount, currency, rates)` 换算。要更权威换 ECB/带 key 源即可。
 - **`storage.py`**：SQLite 落库 + 上述 helper。品牌无关。
-- **`export_web.py`**：合并各品牌最新 run 导出 `docs/data.json`。每条产品含：品牌/品类/双语名（US+CN）/尺寸（尽力解析）/货号 + 各国当地原价与 CNY 价。列顺序：CNY 按 **中日韩港新美法**，价差列（相对中国）按 **日韩港新美法**。payload 含 `brands_updated`（各品牌抓取时间）、`fx_updated`。
+- **`export_web.py`**：合并各品牌最新 run 导出 `docs/data.json`。每条产品含：品牌/品类/品名/尺寸/货号 + 各国当地原价与 CNY 价。
+  - **品类跨品牌合并**（`CATEGORY_MERGE`）：`项链与吊坠`(宝诗龙)→`项链`、`订婚戒指`(卡地亚)→`婚戒`，让两品牌同义品类归并。
+  - **品名三个字段**：`name_cn`(中国名)、`name_us`(美国名)、`name`(**最优可用品名**，按 `_NAME_PRIORITY` 中文→英文→其他市场回退)。卡地亚很多款不在中/美售卖（`name_cn`/`name_us` 空）但在 SG/HK/FR 有名，故前端默认列用 `name`，避免显示「—」。
+  - 列顺序：CNY 按 **中日韩港新美法**，价差列（相对中国）按 **日韩港新美法**。payload 含 `brands_updated`（各品牌抓取时间）、`fx_updated`。
 - **`run.py`**：编排单品牌一次运行（scrape→fx→store→export）。
 - **`update_fx.py`**：每日仅刷新汇率——对**每个品牌各自最新 run** 用今日汇率重算 `cny_price` 写回，再重新导出 `data.json`。不抓取、不需要浏览器（只用 requests）。`run_ts`/`local_price` 不变，故前端「品牌数据更新」时间不变、「汇率更新」时间刷新。
 
@@ -143,7 +146,7 @@ config/<brand>.yaml  ──(adapter 字段)──▶  src/brands/<adapter>.scrap
 ## 8. 前端（GitHub Pages）
 
 - 纯静态：`docs/index.html`（内联 CSS/JS）`fetch ./data.json`，全部筛选/对比在浏览器端完成。
-- 功能：品牌/品类筛选、品名/货号搜索、价格段筛选（基于中国价，无则各国最低 CNY）、筛选结果均价差大号卡片、勾选「显示原价」追加 7 国当地货币原价列、「显示美国品名」开关（默认隐藏该列）。
+- 功能：品牌/品类筛选（品类已跨品牌合并，见 §5）、品名/货号搜索、价格段筛选（基于中国价，无则各国最低 CNY）、筛选结果均价差大号卡片、勾选「显示原价」追加 7 国当地货币原价列、「显示美国品名」开关（默认隐藏该列）。默认「品名」列用 export 的最优可用名（`name`，中文优先）。
 - 展示细节：金额以**万**为单位（人民币价 1 位小数、原价 2 位）；人民币价单元格无 ¥ 符号；最低价高亮绿色；各国价格全为空的行不显示；更新时间显示为**北京时间**（`fmtBeijing` 把 UTC 转 UTC+8）。
 - **上线方式**：仓库 Settings → Pages → Source = Deploy from a branch → `main` / `/docs`。站点：`https://royyiyangliu.github.io/brandtracker/`。（无 Pages 管理 API，需手动开一次。）
 

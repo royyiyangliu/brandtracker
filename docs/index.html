@@ -166,7 +166,7 @@ function applyFilters(){
     if(!isNaN(f.min) && (pr==null || pr<f.min)) return false;
     if(!isNaN(f.max) && (pr==null || pr>f.max)) return false;
     if(f.q){
-      const hay=(p.ref+" "+p.name_us+" "+p.name_cn+" "+p.category).toLowerCase();
+      const hay=(p.ref+" "+p.name+" "+p.name_us+" "+p.name_cn+" "+p.category).toLowerCase();
       if(!hay.includes(f.q)) return false;
     }
     return true;
@@ -200,7 +200,7 @@ function buildHead(){
     <th class="txt" data-k="brand">品牌</th>
     <th class="txt" data-k="category">品类</th>`;
   if(showUsName) c+=`<th class="txt" data-k="name_us">品名（美国）</th>`;
-  c+=`<th class="txt" data-k="name_cn">品名（中国）</th>
+  c+=`<th class="txt" data-k="name">品名</th>
     <th class="txt" data-k="size">尺寸</th>
     <th class="txt" data-k="ref">货号</th>`;
   CNY.forEach((c2,i)=> c+=`<th class="${i===0?'sep':''}" data-k="cny:${c2}">${CSHORT[c2]}</th>`);
@@ -240,7 +240,7 @@ function render(){
     let tds=`<td class="txt">${p.brand}</td>`+
             `<td class="txt"><span class="cat-chip">${p.category}</span></td>`+
             (showUsName?`<td class="txt">${p.name_us||'<span class="muted">—</span>'}</td>`:``)+
-            `<td class="txt">${p.name_cn||'<span class="muted">—</span>'}</td>`+
+            `<td class="txt">${p.name||p.name_cn||'<span class="muted">—</span>'}</td>`+
             `<td class="txt">${p.size||''}</td>`+
             `<td class="ref">${p.ref}</td>`;
     CNY.forEach((c,i)=>{

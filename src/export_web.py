@@ -17,6 +17,15 @@ DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
 CNY_ORDER = ["CN", "JP", "KR", "HK", "SG", "US", "FR"]   # 中 日 韩 港 新 美 法
 CMP_ORDER = ["JP", "KR", "HK", "SG", "US", "FR"]          # vs 中国
 
+# 跨品牌品类合并（不同品牌品类名不一，统一展示标签）。
+CATEGORY_MERGE = {
+    "项链与吊坠": "项链",    # 宝诗龙 → 与卡地亚「项链」统一
+    "订婚戒指": "婚戒",      # 卡地亚订婚戒并入婚戒
+}
+
+# 「最优可用品名」回退顺序：中文优先（用户是中文），其次英文市场，再次法/日/韩。
+_NAME_PRIORITY = ["CN", "US", "SG", "HK", "FR", "JP", "KR"]
+
 _SIZE_PATTERNS = [
     (r"\bxs\b|extra[ -]small|超小", "XS"),
     (r"\bsmall\b|小号|小型|\bs\b", "小号"),
@@ -56,16 +65,20 @@ def build_payload(conn: sqlite3.Connection, fx_updated: str) -> dict:
             key,
             {
                 "brand": r["brand"],
-                "category": r["category"],
+                "category": CATEGORY_MERGE.get(r["category"], r["category"]),
                 "ref": r["ref"],
-                "name_us": "",
+                "name": "",        # 最优可用品名（前端默认列）
+                "name_us": "",     # 美国品名（开关列）
                 "name_cn": "",
                 "size": "",
                 "cny": {},
                 "local": {},   # country -> [amount, currency]
+                "_names": {},  # country -> name（用于回退）
                 "_urls": [],
             },
         )
+        if r["name"]:
+            p["_names"][r["country"]] = r["name"]
         if r["country"] == "US" and r["name"]:
             p["name_us"] = r["name"]
         if r["country"] == "CN" and r["name"]:
@@ -79,8 +92,13 @@ def build_payload(conn: sqlite3.Connection, fx_updated: str) -> dict:
 
     out = []
     for p in products.values():
+        # 最优可用品名：按优先级取第一个有名的市场（多数卡地亚款不在中国/美国售卖，
+        # 但在 SG/HK/FR 等有名 —— 避免前端显示「—」）。
+        p["name"] = next((p["_names"][c] for c in _NAME_PRIORITY if p["_names"].get(c)),
+                         next(iter(p["_names"].values()), ""))
         p["size"] = _size(p["name_us"], p["name_cn"], *p["_urls"])
         p.pop("_urls", None)
+        p.pop("_names", None)
         out.append(p)
 
     # stable order: 品牌, 品类, 然后按中国价（无则各国最低 CNY）
