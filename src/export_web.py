@@ -34,15 +34,26 @@ def _size(*texts: str) -> str:
     return ""
 
 
-def build_payload(conn: sqlite3.Connection, run_ts: str, fx_updated: str) -> dict:
-    rows = conn.execute(
-        "SELECT * FROM observations WHERE run_ts = ?", (run_ts,)
-    ).fetchall()
+def build_payload(conn: sqlite3.Connection, fx_updated: str) -> dict:
+    """合并「每个品牌各自最新一次 run」到同一份 payload。
 
-    products: dict[str, dict] = {}
+    各品牌独立运行、run_ts 不同；前端要的是所有品牌的最新数据。按 (brand, ref) 归一，
+    避免不同品牌货号偶然撞键。
+    """
+    from .storage import latest_run_per_brand
+
+    latest = latest_run_per_brand(conn)   # {brand: run_ts}
+    rows = []
+    for brand, ts in latest.items():
+        rows += conn.execute(
+            "SELECT * FROM observations WHERE brand = ? AND run_ts = ?", (brand, ts)
+        ).fetchall()
+
+    products: dict[tuple, dict] = {}
     for r in rows:
+        key = (r["brand"], r["ref"])
         p = products.setdefault(
-            r["ref"],
+            key,
             {
                 "brand": r["brand"],
                 "category": r["category"],
@@ -72,16 +83,18 @@ def build_payload(conn: sqlite3.Connection, run_ts: str, fx_updated: str) -> dic
         p.pop("_urls", None)
         out.append(p)
 
-    # stable order: category, then by China price (fallback min CNY)
+    # stable order: 品牌, 品类, 然后按中国价（无则各国最低 CNY）
     def keyf(p):
         ref = p["cny"].get("CN")
         anchor = ref if ref is not None else (min(p["cny"].values()) if p["cny"] else 0)
-        return (p["category"], anchor)
+        return (p["brand"], p["category"], anchor)
 
     out.sort(key=keyf)
 
     return {
-        "brand_updated_utc": run_ts,
+        # 各品牌最新抓取时间；brand_updated_utc 取最新者，供前端「数据更新」展示。
+        "brand_updated_utc": max(latest.values()) if latest else "",
+        "brands_updated": latest,
         "fx_updated": fx_updated,
         "cny_order": CNY_ORDER,
         "cmp_order": CMP_ORDER,
@@ -90,9 +103,9 @@ def build_payload(conn: sqlite3.Connection, run_ts: str, fx_updated: str) -> dic
     }
 
 
-def export(conn: sqlite3.Connection, run_ts: str, fx_updated: str) -> Path:
+def export(conn: sqlite3.Connection, fx_updated: str) -> Path:
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
-    payload = build_payload(conn, run_ts, fx_updated)
+    payload = build_payload(conn, fx_updated)
     path = DOCS_DIR / "data.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
                     encoding="utf-8")
@@ -104,9 +117,8 @@ if __name__ == "__main__":
     from . import fx, storage
 
     conn = storage.connect()
-    ts = storage.latest_run_ts(conn)
     try:
         fx_updated = fx.fetch_rates_to_cny().get("updated", "")
     except Exception:
         fx_updated = ""
-    print("exported", export(conn, ts, fx_updated), "for run", ts)
+    print("exported", export(conn, fx_updated))

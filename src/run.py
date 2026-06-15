@@ -1,7 +1,11 @@
-"""Orchestrator: scrape -> convert to CNY -> persist -> render report.
+"""Orchestrator: scrape -> convert to CNY -> persist -> export web data.
 
 Usage:
     python -m src.run config/boucheron.yaml
+    python -m src.run config/cartier.yaml
+
+每个品牌单独一次运行（互不影响）：抓取逻辑分发到 src/brands/<adapter>，通用底座
+（fx / storage / export_web）共用。报告（latest.md）已取消——只产出前端 data.json。
 """
 from __future__ import annotations
 
@@ -11,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from . import export_web, fx, report, storage
+from . import export_web, fx, storage
 
 
 def main(config_path: str) -> int:
@@ -21,7 +25,7 @@ def main(config_path: str) -> int:
     print(f"== {cfg['brand']} == run {run_ts} (UTC)")
 
     # 1. scrape (import here so report-only environments don't need playwright)
-    from .scraper import scrape_brand
+    from .brands import scrape_brand
     rows = scrape_brand(cfg)
     if not rows:
         print("No products scraped; aborting.")
@@ -38,16 +42,8 @@ def main(config_path: str) -> int:
     n = storage.save_observations(conn, run_ts, rows)
     print(f"Saved {n} observations to {storage.DB_PATH}")
 
-    # 4. report
-    stored = storage.load_run(conn, run_ts)
-    md = report.render_markdown(
-        run_ts, cfg["brand"], rates.get("updated", "?"), stored
-    )
-    path = report.write_report(md, run_ts)
-    print(f"Report written to {path}")
-
-    # 5. export JSON for the static frontend (GitHub Pages)
-    web = export_web.export(conn, run_ts, rates.get("updated", ""))
+    # 4. export combined web data (所有品牌各自最新 run 合并到一个 data.json)
+    web = export_web.export(conn, rates.get("updated", ""))
     print(f"Web data written to {web}")
     return 0
 

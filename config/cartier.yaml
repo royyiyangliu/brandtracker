@@ -1,0 +1,92 @@
+# 卡地亚 Cartier — 全球比价，按品类抓取。详见 CLAUDE.md §14。
+#
+# 平台：.com 是 SFCC；cartier.cn 是另一套中国特供站。抓取由 src/brands/cartier.py 实现，
+# 必须用真实 Chrome（channel="chrome"）。零代理。
+#
+# SFCC 6 国（type 缺省即 sfcc）：直打网格端点
+#   Sites-{site}-Site/{locale}/Search-UpdateGrid?cgid={cgid}&...&sz=400
+# CN（type: cn）：抓 cartier.cn/jewellery/collection/{cn_slug} 页，滚动加载。
+brand: Cartier
+adapter: cartier
+
+# canonical 品类 -> 中文展示标签
+categories:
+  rings: 戒指
+  necklaces: 项链
+  bracelets: 手链
+  earrings: 耳环
+  engagement-rings: 订婚戒指
+  wedding-bands: 婚戒
+
+# canonical -> SFCC cgid（6 国通用）
+category_cgids:
+  rings: jewelry_rings
+  necklaces: jewelry_necklaces
+  bracelets: jewelry_bracelets
+  earrings: jewelry_earrings
+  engagement-rings: jewelry_engagementrings
+  wedding-bands: jewelry_weddingbands
+
+# canonical -> cartier.cn 的 all-* slug（缺省=该品类 .cn 上没有，跳过）
+cn_slugs:
+  rings: all-rings
+  necklaces: all-necklaces
+  bracelets: all-bracelets
+  earrings: all-earrings
+
+countries:
+  - code: US
+    currency: USD
+    type: sfcc
+    site: CartierUS
+    locale: en_US
+    browser_locale: en-US
+    accept_language: "en-US,en;q=0.9"
+    landing: https://www.cartier.com/en-us
+
+  # SG/HK/JP/FR 已迁到 Adobe AEM + Algolia（与 US/KR 的 SFCC 不同），走 _scrape_aem。
+  - code: SG
+    currency: SGD
+    type: aem
+    browser_locale: en-SG
+    accept_language: "en-SG,en;q=0.9"
+    landing: https://www.cartier.com/en-sg
+
+  - code: HK
+    currency: HKD
+    type: aem
+    browser_locale: en-HK
+    accept_language: "en-HK,en;q=0.9"
+    landing: https://www.cartier.com/en-hk
+
+  - code: JP
+    currency: JPY
+    type: aem
+    browser_locale: ja-JP
+    accept_language: "ja-JP,ja;q=0.9,en;q=0.8"
+    landing: https://www.cartier.com/ja-jp
+
+  - code: KR
+    currency: KRW
+    type: sfcc
+    site: CartierKR
+    locale: ko_KR
+    browser_locale: ko-KR
+    accept_language: "ko-KR,ko;q=0.9,en;q=0.8"
+    landing: https://www.cartier.com/ko-kr
+
+  - code: FR
+    currency: EUR
+    type: aem
+    browser_locale: fr-FR
+    accept_language: "fr-FR,fr;q=0.9,en;q=0.8"
+    landing: https://www.cartier.com/fr-fr
+
+  # 中国大陆：cartier.cn（非 SFCC）。货号 B…，落库时补 CR 前缀对齐 .com。
+  - code: CN
+    currency: CNY
+    type: cn
+    browser_locale: zh-CN
+    accept_language: "zh-CN,zh;q=0.9,en;q=0.8"
+    landing: https://www.cartier.cn/
+    base: https://www.cartier.cn/jewellery/collection

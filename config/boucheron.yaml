@@ -10,6 +10,7 @@
 # where slug defaults to the canonical category key, overridden per market when
 # the site localises the slug (e.g. France: rings -> bagues).
 brand: Boucheron
+adapter: boucheron
 
 # Canonical categories (key) -> Chinese display label.
 categories:

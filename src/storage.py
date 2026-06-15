@@ -73,6 +73,17 @@ def latest_run_ts(conn: sqlite3.Connection) -> str | None:
     return row["ts"] if row else None
 
 
+def latest_run_per_brand(conn: sqlite3.Connection) -> dict[str, str]:
+    """每个品牌各自最新一次 run 的时间戳：{brand: run_ts}.
+
+    品牌各自独立运行（时间戳不同），前端/汇率刷新都按「每品牌最新 run」取数。
+    """
+    rows = conn.execute(
+        "SELECT brand, MAX(run_ts) AS ts FROM observations GROUP BY brand"
+    ).fetchall()
+    return {r["brand"]: r["ts"] for r in rows}
+
+
 def load_run(conn: sqlite3.Connection, run_ts: str) -> list[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM observations WHERE run_ts = ?", (run_ts,)

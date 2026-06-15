@@ -19,20 +19,26 @@ brandtracker/
 ├── README.md                  # 面向用户的简介
 ├── requirements.txt           # playwright / PyYAML / requests
 ├── config/
-│   └── boucheron.yaml         # 每个品牌一个 YAML（声明国家、品类、URL 拼装规则）
+│   ├── boucheron.yaml         # 每个品牌一个 YAML（声明国家、品类、URL/接口规则、adapter）
+│   └── cartier.yaml
 ├── src/
-│   ├── scraper.py             # Playwright 抓取 + 分页 + 价格/名称解析
-│   ├── fx.py                  # 实时汇率 → CNY
-│   ├── storage.py             # SQLite 落库（含旧 schema 自动迁移）
-│   ├── report.py              # 跨国对比表（Markdown）
-│   └── run.py                 # 编排器：scrape → fx → store → report
-├── .github/workflows/weekly.yml  # 每周 cron + push 触发，跑完回写数据
+│   ├── brands/                # 每品牌一个抓取 adapter（互相独立，bug 锁定在单品牌）
+│   │   ├── __init__.py        #   注册表：按 config 的 adapter 字段分发
+│   │   ├── boucheron.py       #   Magento/Hyvä：分页 fetch + DOM 解析（自带 Chromium）
+│   │   └── cartier.py         #   SFCC + AEM/Algolia + cartier.cn 三路径（真实 Chrome）
+│   ├── fx.py                  # 实时汇率 → CNY（共用）
+│   ├── storage.py             # SQLite 落库（共用；含 latest_run_per_brand）
+│   ├── export_web.py          # 导出 docs/data.json（按品牌各取最新 run 合并）
+│   └── run.py                 # 编排器：scrape(adapter) → fx → store → export
+├── .github/workflows/
+│   ├── weekly.yml             # 每周一 cron + 手动；宝诗龙→卡地亚顺序两步、各自提交
+│   └── daily-fx.yml           # 每天（周一除外）只刷新汇率
 ├── data/prices.db             # SQLite（被 CI 用 `git add -f` 回写，保留历史）
-├── output/latest.md           # 最新对比报告
 └── docs/                      # GitHub Pages 静态前端
-    ├── index.html             # 比价页（筛选/搜索/价差统计/显示原价）
-    └── data.json              # 由 src/export_web.py 从最新 run 导出（前端数据源）
+    ├── index.html             # 比价页（筛选/搜索/价差统计/显示原价；支持多品牌）
+    └── data.json              # 由 src/export_web.py 合并各品牌最新 run 导出
 ```
+> 注：**已移除人看的 Markdown 报告**（旧 `src/report.py` / `output/latest.md`）——只产出前端 `data.json`。新增品牌 = 加 `src/brands/<name>.py` + `config/<name>.yaml`（见 §15）。
 
 ## 3. 数据流（`python -m src.run config/<brand>.yaml`）
 
@@ -206,58 +212,65 @@ xvfb-run -a python -m src.run config/boucheron.yaml   # 无显示环境用 xvfb-
 - **项目知识全部记录在本 CLAUDE.md**，不使用本地 memory（用户要求：新 session 靠读本文件即可，本地不留 memory）。任何探查结论/决策/约定都写进这里。
 - **临时探查脚本**用 `poc_*.py`，用完即删、不提交（§8）。
 
-## 14. 第二品牌：卡地亚 Cartier（探查完成，待实现）
+## 14. 第二品牌：卡地亚 Cartier（已实现）
 
-> 2026-06-15 用真实浏览器 POC 探查完毕，**7 国 × 全部珠宝品类方案已确定、零代理**。下面是写爬虫所需的全部事实。要求同宝诗龙：周度、同 7 国（US/SG/HK/JP/KR/FR/CN）、同样解析项，品类取**全部珠宝品类**。
+> 实现于 `src/brands/cartier.py` + `config/cartier.yaml`。同宝诗龙：周度、7 国
+> （US/SG/HK/JP/KR/FR/CN）、6 个珠宝品类、零代理。**关键：卡地亚横跨三套平台**
+> （卡地亚在做平台迁移，未来可能再变——抓不到时先确认平台是否换了）。
 
-### 14.1 平台与反爬（关键差异）
-- `.com` 站是 **Salesforce Commerce Cloud（SFCC/Demandware）**；`cartier.cn` 是**另一套中国特供平台**（cookie `cartier_session`/`XSRF-TOKEN`/`gdp_*`，非 SFCC）。
-- 反爬同是 **Akamai，但比宝诗龙严**。**必须用真实 Chrome**：Playwright `channel="chrome"`（**不是自带 Chromium**——自带的会被 JP/SG/HK/FR 店面判为 bot 返回 403；US 店面宽松，自带的也能过，所以早期误判为"geo 封锁"）。`headless=True` 即可。
-- 配套伪装：现代 UA（Chrome/145）+ **完整 client-hints 头**（`sec-ch-ua`/`sec-ch-ua-mobile`/`sec-ch-ua-platform`）+ `accept`/`accept-language` + stealth init（`navigator.webdriver=undefined` 等）。
-- **每国先 `goto` 该国落地页热身**（建立 Akamai `ak_bmsc`/`_abck`/`bm_sz` 会话），再打数据接口。
-- **零代理**：已从 GitHub 美国 runner 验证 US 直连；从美国 IP + 真实 Chrome 验证 7 国均可。美国 IP 访问非美站会弹 geo「跳回美国」窗口，但走网格接口取数不受影响，无需处理弹窗。
-- **CI 注意**：runner 需有 Google Chrome —— 加 `python -m playwright install chrome`（或用 ubuntu runner 预装的 Chrome），不能只 `install chromium`。
+### 14.1 三套平台（实测）
+| 国家 | 平台 | adapter 路径 |
+|---|---|---|
+| US, KR | SFCC / Demandware（`.com`，老平台）| `_scrape_sfcc` |
+| SG, HK, JP, FR | Adobe AEM + Algolia（`.com`，新平台，标志 `/libs/granite`、`/libs/cq`）| `_scrape_aem` |
+| CN | cartier.cn 中国特供站（cookie `cartier_session`/`XSRF-TOKEN`/`gdp_*`）| `_scrape_cn` |
 
-### 14.2 珠宝品类（canonical → cgid，US 数量）
-| canonical | 中文 | SFCC cgid | CN slug | US 数量 |
+### 14.2 反爬（三套通用）
+- 同是 **Akamai，但比宝诗龙严**。**必须用真实 Chrome**：Playwright `channel="chrome"`（**不是自带 Chromium**——自带的会被新平台店面判 bot 返回 403；早期误判为"geo 封锁"其实是这个原因）。`headless=True` 即可，**零代理**。
+- 配套：现代 UA（Chrome/145）+ **完整 client-hints 头**（`sec-ch-ua` 等）+ `accept-language` + stealth init。每国先 `goto` 落地页热身（建立 Akamai 会话）再打数据接口。
+- **CI 注意**：runner 需 `python -m playwright install chrome`，不能只 `install chromium`。
+
+### 14.3 珠宝品类（canonical → 中文 / SFCC cgid / CN slug）
+| canonical | 中文 | SFCC cgid（US/KR）| CN slug | AEM slug（SG/HK/JP/FR）|
 |---|---|---|---|---|
-| rings | 戒指 | `jewelry_rings` | `all-rings` | 343 |
-| necklaces | 项链 | `jewelry_necklaces` | `all-necklaces` | 262 |
-| bracelets | 手链/手镯 | `jewelry_bracelets` | `all-bracelets` | 281 |
-| earrings | 耳环 | `jewelry_earrings` | `all-earrings` | 187 |
-| engagement-rings | 订婚戒 | `jewelry_engagementrings` | （CN 无，404）| 39 |
-| wedding-bands | 婚戒/对戒 | `jewelry_weddingbands` | （CN 无，404）| 114 |
+| rings | 戒指 | `jewelry_rings` | `all-rings` | `rings` |
+| necklaces | 项链 | `jewelry_necklaces` | `all-necklaces` | `necklaces` |
+| bracelets | 手链 | `jewelry_bracelets` | `all-bracelets` | `bracelets` |
+| earrings | 耳环 | `jewelry_earrings` | `all-earrings` | `earrings` |
+| engagement-rings | 订婚戒指 | `jewelry_engagementrings` | （CN 无）| `engagement-rings` |
+| wedding-bands | 婚戒 | `jewelry_weddingbands` | （CN 无）| `wedding-bands` |
 
-CN 只有 4 个品类页（rings/necklaces/bracelets/earrings）；engagement/wedding/brooches 在 .cn 均 404。
+CN 只有 4 个品类页（戒指/项链/手链/耳环）；engagement/wedding 在 .cn 均 404，跳过。
 
-### 14.3 SFCC 6 国抓取（US/SG/HK/JP/FR/KR）
-- **不抓品类落地页**（KR 等无该 URL），统一直打网格接口（热身后在页面内 `fetch`）：
-  `https://www.cartier.com/on/demandware.store/Sites-Cartier{SITE}-Site/{LOCALE}/Search-UpdateGrid?cgid={cgid}&prefn1=sapIsVisibleWeb&prefv1=true&start=0&sz=400`
-  - `sz=400` 一次取整品类（最大品类 343 < 400；如某品类超 400 再用 `start` 翻页）。
-  - 返回 HTML 网格，用 `DOMParser` 解析 tile。
-- **站点 id / locale / 落地页 / 币种**（US、KR 已实测确认；SG/HK/JP/FR 站点 id 按 `Cartier{US地区码}` 类推，实现时各打开一次确认）：
-  | 国 | SITE | LOCALE | 落地页(热身) | 币种 |
-  |---|---|---|---|---|
-  | US | CartierUS | en_US | `/en-us` | USD |
-  | SG | CartierSG | en_SG | `/en-sg` | SGD |
-  | HK | CartierHK | en_HK | `/en-hk` | HKD |
-  | JP | CartierJP | ja_JP | `/ja-jp` | JPY |
-  | FR | CartierFR | fr_FR | `/fr-fr` | EUR |
-  | KR | CartierKR | ko_KR | `/ko-kr` | KRW |
-- **tile 解析**：选择器 `.product-tile`；名称 `.product-tile__name`/`.pdp-link`；价格 `.price`（文本如 `$30,300`）；货号从 `a[href]` 正则 `CR[A-Z]\d{7}`。
-- 注：直接打品类落地页时各国 slug 不一（US=`/en-us/jewelry/rings/` 美式 jewelry；SG/HK/JP/FR=`/<loc>/jewellery/rings/` 英式 jewellery；KR 无）。**用网格接口可绕开这些差异**，推荐。
+### 14.4 三条抓取路径
+- **SFCC（US/KR）**：热身落地页后，在页面内 `fetch` 网格接口
+  `…/on/demandware.store/Sites-{site}-Site/{locale}/Search-UpdateGrid?cgid={cgid}&prefn1=sapIsVisibleWeb&prefv1=true&start=0&sz=400`，
+  返回 HTML 网格用 `DOMParser` 解析 `.product-tile`（名称 `.product-tile__name`、价格 `.price`、货号 `a[href]` 取 `CR[A-Z]\d{7}`）。站点 id：**仅 US=`CartierUS`/`en_US`、KR=`CartierKR`/`ko_KR` 实测可用**（KR 无品类落地页 URL，但 cgid 端点直接命中）。
+- **AEM/Algolia（SG/HK/JP/FR）**：`goto` 品类页 `{landing}/jewellery/{slug}/`，**运行时拦截**该页自己发的两个请求（不硬编码各国索引名/集合 id）：① Algolia 列表 `…/bin/car/getindexProductsInAlgolia.<index>._collections:<collection>.<n>.json`（把末段 limit 改成 `.1000.json` 取全；`hits[].globalReference`=CR 货号、`shortDescription`/`description`=名称、`nbHits`=总数）；② 价格 `<品类页路径>.productinfo.<ref-ref-…>.json`（按 20 个货号一批构造，`additionals.car.variants[].priceValue` 取最小即「起」价）。
+- **CN（cartier.cn）**：`goto` `…/jewellery/collection/{cn_slug}`，滚动到货号数稳定，解析卡片（货号 `a[href^="/creation/"]` 取 `B\d{6,8}`、名称 `.works_name`/`a[title]`、价格 `.works_price`）。
+- **货号归一（跨国 join 关键）**：统一用 `CR[A-Z]\d{7}`。SFCC/AEM 的 `globalReference` 本就是该格式；**CN 是 `B…`（= .com 去掉 `CR`），落库时补 `CR` 前缀对齐**。
 
-### 14.4 中国 cartier.cn 抓取
-- 真实 Chrome 先热身 `https://www.cartier.cn/`。
-- 品类页：`https://www.cartier.cn/jewellery/collection/{all-rings|all-necklaces|all-bracelets|all-earrings}`。
-- **懒加载**：滚动到底直到货号数稳定（连续几轮不增即停；all-rings 约 372，可能含推荐位——解析时限定在 `works_*` 商品网格内）。底层是 POST `/api/search/getList`（JSON），也可逆向直接调用。
-- **卡片解析**：商品卡 `.works_introduce_simple`；名称 `h3.works_name`（或 `a[title]`，如「LOVE Unlimited戒指 18K玫瑰金」）；价格 `.works_price`（`￥21,300`，CNY）；货号从 `a[href^="/creation/"]` 取 `B\d{6,8}`。
-- **货号归一（跨国 join 关键）**：CN 货号是 `B…` 格式 = `.com` 货号去掉 `CR` 前缀（CN `B4247600` ↔ .com `CRB4247600`）。落库时给 CN 货号**补 `CR` 前缀**，与其余 6 国对齐到统一 join 键 `CR[A-Z]\d{7}`。
+### 14.5 已实现结果与备注
+- 实测各国戒指件数：US 343 / SG 229 / HK 236 / JP 204 / KR 333 / FR 234 / CN 372；跨国 join 生效（同一 `CRB…` 在各国出现）。
+- **AEM 4 国有价比例偏低（约 57–60%）**：这些市场高级珠宝「洽询」多，属正常（比价只取多国都有价的款）。
+- AEM 国家的商品名取 `description` 等字段（`shortDescription` 常只是材质）；但前端只展示 **US 英文名 + CN 中文名**两列，AEM 名仅入库不外显。
+- 架构：`src/brands/` per-brand adapter（见 §15）；每品牌独立 config + 独立 run，互不影响。
 
-### 14.5 实现计划（按 §9 的 per-brand adapter）
-1. 抽 `src/brands/boucheron.py`（搬现有逻辑，行为不变）+ `src/brands/cartier.py`（SFCC 6 国 + cartier.cn）；通用编排（浏览器工厂、fx、storage、report、export_web）留共用层，按 config 品牌名/`scrape_strategy` 分发。浏览器需按 adapter 选 `channel`（宝诗龙自带 chromium / 卡地亚真实 chrome）。
-2. 写 `config/cartier.yaml`（品类→cgid+CN slug；7 国 SITE/LOCALE/币种/落地页）。
-3. 价格按币种解析复用 `_PRICE_PATTERNS`（USD/SGD/HKD/JPY/KRW/EUR/CNY 都已覆盖）。
-4. 跑通：一国一品类 → 7 国全量，核对件数/价格合理性。
-5. 自动化：weekly workflow 增加 Cartier（含 `playwright install chrome`）。前端已支持多品牌筛选，基本不改。
-- **待用户确认（尚未定）**：卡地亚上线后是否继续保留宝诗龙的周抓取（两个品牌都跑 / 仅卡地亚）。
+## 15. 多品牌架构（per-brand adapter）
+
+按用户要求：**抓取逻辑按品牌彻底分开**（脆弱、易出 bug、各品牌不同的部分隔离），
+**底座共用**（汇率/数据库/导出，因为要共用一个汇率源、产出一个合并 `data.json`）。
+
+- **adapter**：`src/brands/<name>.py`，实现 `scrape_brand(config) -> list[dict]`，每条含
+  `brand/category/country/currency/ref/name/local_price/url`。adapter 自管浏览器（宝诗龙
+  自带 Chromium、卡地亚真实 Chrome）、反爬、翻页、解析。某品牌 bug 只影响自己。
+- **注册/分发**：`src/brands/__init__.py` 的 `scrape_brand(config)` 按 config 的 `adapter:`
+  字段（缺省=品牌名小写）import 对应模块。config 必须写 `adapter: <name>`。
+- **共用底座**：`fx.py`（汇率）、`storage.py`（同一 `data/prices.db`，表有 `brand` 列）、
+  `export_web.py`（按品牌各取最新 run 合并到一个 `data.json`，键 `(brand, ref)`）。
+- **独立运行 / CI**：每品牌单独 `python -m src.run config/<brand>.yaml`，各自 run_ts、各自
+  提交。`weekly.yml` 一个 job 内顺序两步（宝诗龙→卡地亚），都用 `if: always()`，任一品牌
+  失败不影响另一个已提交的数据。每日汇率 `update_fx.py` 对**每品牌最新 run** 各自重算 CNY。
+- **新增品牌**：① 探查（§9 流程，临时 `poc_*.py`）；② 加 `src/brands/<name>.py`；
+  ③ 加 `config/<name>.yaml`（含 `adapter: <name>`）；④ 本地 `python -m src.run` 跑通；
+  ⑤ `weekly.yml` 加一步抓取 + 一步提交。前端 `data.json` 已多品牌，基本不动。

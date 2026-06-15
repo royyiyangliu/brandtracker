@@ -1,4 +1,4 @@
-"""Playwright-based scraper.
+"""Boucheron scraper adapter (Magento + Hyvä + Amasty Shopby).
 
 Boucheron sits behind Akamai Bot Manager (and boucheron.cn behind Alibaba ESA):
 plain HTTP clients get blocked, but a real headless Chromium is served HTTP 200.
