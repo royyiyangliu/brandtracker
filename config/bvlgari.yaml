@@ -1,0 +1,84 @@
+# 宝格丽 Bvlgari — 全球比价，按品类抓取。详见 CLAUDE.md §17。
+#
+# 平台两套：US/SG/HK/JP/KR/FR 是 .com 的 SFCC Composable/PWA（SCAPI，JSON 接口，
+# 带 Bearer 鉴权，运行时捕获）；CN 是 bulgari.cn 的 Magento（V4 catalog/layer 接口）。
+# 反爬宽松，自带 Chromium、零代理。货号 AN######，7 国（含 CN sku）格式一致、无需归一。
+brand: Bvlgari
+adapter: bvlgari
+
+# canonical 品类 -> 中文标签。engagement-rings/wedding-bands 都标「婚戒」（自然合并）。
+categories:
+  rings: 戒指
+  necklaces: 项链
+  bracelets: 手链
+  earrings: 耳环
+  engagement-rings: 婚戒
+  wedding-bands: 婚戒
+
+# .com SCAPI 品类数字 cgid（来自 categories 目录树，跨 locale 共享）。
+category_cgids:
+  rings: "241473"
+  necklaces: "241474"
+  bracelets: "241480"
+  earrings: "241475"
+  engagement-rings: "241498"
+  wedding-bands: "245590"
+
+countries:
+  # .com SCAPI（type 缺省）。siteId 运行时从 PWA 请求捕获；currency/locale 见下。
+  # warm_slugs：本地化「戒指」品类页，用于热身捕获 product-search 模板（捕获后换 cgid 覆盖各品类）。
+  - code: US
+    currency: USD
+    browser_locale: en-US
+    accept_language: "en-US,en;q=0.9"
+    base: https://www.bulgari.com/en-us
+    warm_slugs: ["jewelry/rings"]
+
+  - code: SG
+    currency: SGD
+    browser_locale: en-SG
+    accept_language: "en-SG,en;q=0.9"
+    base: https://www.bulgari.com/en-sg
+    warm_slugs: ["jewellery/rings"]
+
+  - code: HK
+    currency: HKD
+    browser_locale: en-HK
+    accept_language: "en-HK,en;q=0.9"
+    base: https://www.bulgari.com/en-hk
+    warm_slugs: ["jewellery/rings"]
+
+  - code: JP
+    currency: JPY
+    browser_locale: ja-JP
+    accept_language: "ja-JP,ja;q=0.9,en;q=0.8"
+    base: https://www.bulgari.com/ja-jp
+    warm_slugs: ["ジュエリー/リング", "jewellery/rings"]
+
+  - code: KR
+    currency: KRW
+    browser_locale: ko-KR
+    accept_language: "ko-KR,ko;q=0.9,en;q=0.8"
+    base: https://www.bulgari.com/ko-kr
+    warm_slugs: ["주얼리/반지", "jewellery/rings", "jewelry/rings"]
+
+  - code: FR
+    currency: EUR
+    browser_locale: fr-FR
+    accept_language: "fr-FR,fr;q=0.9,en;q=0.8"
+    base: https://www.bulgari.com/fr-fr
+    warm_slugs: ["joaillerie/bagues", "jewellery/rings"]
+
+  # 中国大陆：bulgari.cn（Magento）。engagement/wedding 在 .cn 路径未确认，先抓 4 个主品类；
+  # 婚戒的跨国对比仍由 .com 6 国提供。
+  - code: CN
+    currency: CNY
+    type: magento
+    browser_locale: zh-CN
+    accept_language: "zh-CN,zh;q=0.9,en;q=0.8"
+    base: https://www.bulgari.cn
+    cn_paths:
+      rings: jewelry/rings
+      necklaces: jewelry/necklaces
+      bracelets: jewelry/bracelets
+      earrings: jewelry/earrings
