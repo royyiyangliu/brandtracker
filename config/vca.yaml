@@ -1,0 +1,64 @@
+# 梵克雅宝 Van Cleef & Arpels — 全球比价，按品类抓取。详见 CLAUDE.md §6.3。
+#
+# 平台：7 国统一 Adobe AEM（中国在 vancleefarpels.cn，同一套）。抓取由 src/brands/vca.py
+# 实现，必须真实 Chrome（channel="chrome"）。零代理。
+#
+# 每国 base = 区域/语言前缀；CN 在 .cn 域名。cc = priceCountryCode（缺省=code）。
+brand: Van Cleef & Arpels
+adapter: vca
+
+# canonical 品类(= e-boutique slug) -> 中文展示标签。
+# 不含手表。clips/cufflinks 经 export_web 的 CATEGORY_MERGE 与宝诗龙「胸针」合并为「胸针袖扣」。
+categories:
+  rings: 戒指
+  necklaces-and-pendants: 项链与吊坠
+  bracelets: 手链
+  earrings: 耳环
+  clips: 胸针
+  cufflinks: 袖扣
+
+countries:
+  - code: US
+    currency: USD
+    browser_locale: en-US
+    accept_language: "en-US,en;q=0.9"
+    base: https://www.vancleefarpels.com/us/en
+
+  - code: SG
+    currency: SGD
+    browser_locale: en-SG
+    accept_language: "en-SG,en;q=0.9"
+    base: https://www.vancleefarpels.com/sg/en
+
+  - code: HK
+    currency: HKD
+    browser_locale: en-HK
+    accept_language: "en-HK,en;q=0.9"
+    base: https://www.vancleefarpels.com/hk/en
+
+  - code: JP
+    currency: JPY
+    browser_locale: ja-JP
+    accept_language: "ja-JP,ja;q=0.9,en;q=0.8"
+    base: https://www.vancleefarpels.com/jp/ja
+
+  - code: KR
+    currency: KRW
+    browser_locale: ko-KR
+    accept_language: "ko-KR,ko;q=0.9,en;q=0.8"
+    base: https://www.vancleefarpels.com/kr/ko
+
+  - code: FR
+    currency: EUR
+    browser_locale: fr-FR
+    accept_language: "fr-FR,fr;q=0.9,en;q=0.8"
+    base: https://www.vancleefarpels.com/fr/fr
+
+  # 中国大陆：经 .com/cn/zh 入口，会 302 跳转到 vancleefarpels.cn（同一套 AEM）。
+  # adapter 热身后按落地 origin 重算 base。注意：从中国境外 IP 访问 .cn 域名 DNS 偶发
+  # 解析失败 —— 失败时该国本次优雅跳过，不影响其余 6 国。货号与其余国一致，无需归一。
+  - code: CN
+    currency: CNY
+    browser_locale: zh-CN
+    accept_language: "zh-CN,zh;q=0.9,en;q=0.8"
+    base: https://www.vancleefarpels.com/cn/zh

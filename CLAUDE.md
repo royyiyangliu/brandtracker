@@ -18,7 +18,7 @@
 
 每周爬取**奢侈品牌各国官网**的商品价格（按当地货币、区分货号/型号），用实时汇率换算成**人民币 (CNY)**，让访问者对比同一款商品在全球哪个市场最便宜。
 
-- 当前品牌：**宝诗龙 Boucheron**（珠宝 7 品类）、**卡地亚 Cartier**（珠宝 6 品类）。
+- 当前品牌：**宝诗龙 Boucheron**（珠宝 7 品类）、**卡地亚 Cartier**（珠宝 6 品类）、**梵克雅宝 Van Cleef & Arpels**（珠宝 6 品类）。
 - 覆盖 **7 个市场**：美国 US、新加坡 SG、香港 HK、日本 JP、韩国 KR、法国 FR、中国 CN。
 - 跑在 GitHub Actions 上，**零代理、零成本**。
 - 产物：`docs/data.json`（前端数据源）+ `data/prices.db`（结构化历史）。前端是 GitHub Pages 静态站。
@@ -33,12 +33,14 @@ brandtracker/
 ├── requirements.txt               # playwright / PyYAML / requests
 ├── config/
 │   ├── boucheron.yaml             # 每品牌一个 YAML（国家/品类/URL或接口规则/adapter）
-│   └── cartier.yaml
+│   ├── cartier.yaml
+│   └── vca.yaml
 ├── src/
 │   ├── brands/                    # ← 每品牌一个抓取 adapter（互相独立）
 │   │   ├── __init__.py            #   注册表：按 config 的 adapter 字段分发
 │   │   ├── boucheron.py           #   Magento/Hyvä（自带 Chromium）
-│   │   └── cartier.py             #   SFCC + AEM/Algolia + cartier.cn（真实 Chrome）
+│   │   ├── cartier.py             #   SFCC + AEM/Algolia + cartier.cn（真实 Chrome）
+│   │   └── vca.py                 #   AEM（7 国统一；CN 在 .cn）（真实 Chrome）
 │   ├── fx.py                      # 实时汇率 → CNY（共用）
 │   ├── storage.py                 # SQLite 落库（共用）
 │   ├── export_web.py              # 合并各品牌最新 run → docs/data.json（共用）
@@ -99,7 +101,7 @@ config/<brand>.yaml  ──(adapter 字段)──▶  src/brands/<adapter>.scrap
 - **`fx.py`**：`open.er-api.com`（免费、无 key、每日中间价，base=CNY）。`fetch_rates_to_cny()` 拉一次快照；`to_cny(amount, currency, rates)` 换算。要更权威换 ECB/带 key 源即可。
 - **`storage.py`**：SQLite 落库 + 上述 helper。品牌无关。
 - **`export_web.py`**：合并各品牌最新 run 导出 `docs/data.json`。每条产品含：品牌/品类/品名/尺寸/货号 + 各国当地原价与 CNY 价。
-  - **品类跨品牌合并**（`CATEGORY_MERGE`）：`项链与吊坠`(宝诗龙)→`项链`、`订婚戒指`(卡地亚)→`婚戒`，让两品牌同义品类归并。
+  - **品类跨品牌合并**（`CATEGORY_MERGE`）：`项链与吊坠`(宝诗龙/梵克雅宝)→`项链`、`订婚戒指`(卡地亚)→`婚戒`、`胸针`(宝诗龙/梵克 clips)+`袖扣`(梵克 cufflinks)→`胸针袖扣`，让各品牌同义品类归并。
   - **品名三个字段**：`name_cn`(中国名)、`name_us`(美国名)、`name`(**最优可用品名**，按 `_NAME_PRIORITY` 中文→英文→其他市场回退)。卡地亚很多款不在中/美售卖（`name_cn`/`name_us` 空）但在 SG/HK/FR 有名，故前端默认列用 `name`，避免显示「—」。
   - 列顺序：CNY 按 **中日韩港新美法**，价差列（相对中国）按 **日韩港新美法**。payload 含 `brands_updated`（各品牌抓取时间）、`fx_updated`。
 - **`run.py`**：编排单品牌一次运行（scrape→fx→store→export）。
@@ -136,6 +138,16 @@ config/<brand>.yaml  ──(adapter 字段)──▶  src/brands/<adapter>.scrap
 - 价格解析 `parse_price`：按币种符号取数字（EUR 兼容符号在后）。AEM 的 `formattedPrice`（如 `￥737,000`）也走它。
 - 备注：**AEM 4 国有价比例约 57–60%**（这些市场高级珠宝「洽询」多，正常）；**订婚戒指各国仅约 4 款有价**（多为「裸戒托/钻石另议」，真实情况，非 bug）。AEM 国商品名仅入库不外显（前端只显示 US 英文 + CN 中文名）。
 
+### 6.3 梵克雅宝 Van Cleef & Arpels（`brands/vca.py`）
+- 反爬同卡地亚（Akamai 系）：**必须真实 Chrome**（`channel="chrome"`，headless），零代理，每国先 goto 首页热身。
+- **7 国统一一套 Adobe AEM**（标志 `/libs/granite`、`_jcr_content`、`.rcq`）——比卡地亚干净，单一抓取路径。中国在 `vancleefarpels.cn`（同一套 AEM）。
+- 货号 join 键：`vca[a-z0-9]{7}`（如 `VCARPME300`），**7 国含 CN 格式完全一致，无需归一**。
+- 6 品类（slug→中文）：rings 戒指 / necklaces-and-pendants 项链与吊坠 / bracelets 手链 / earrings 耳环 / clips 胸针 / cufflinks 袖扣（不含手表）。clips+cufflinks 经 `CATEGORY_MERGE` 与宝诗龙胸针合并为「胸针袖扣」。
+- **取数（每国 base = 区域/语言前缀，如 `/us/en`）**：
+  - 列表：分页 `{base}/e-boutique/category/{slug}/_jcr_content/root/searchResultListing/search_result.search.json?page=N&priceCountryCode={cc}` → `all.hits`（ES 结构）：`numberOfPages` 给页数、`hits.hits[]._source` 给每件，其中 `documentTitle`=「VCAR… - 名称」拆出货号+名、`path` 也含货号。
+  - 价格：`{base}/home.productinfo.{cc}.REF-<ref-ref-…>.json`，取 `price`（"14100.00"）/`formattedPrice`。**接口每批上限 10 个货号**（>10 会 400/403），故按 10 个一批。
+- **中国 / `.cn` DNS 坑**：CN 用 `.com/cn/zh` 入口（302 跳转到 `vancleefarpels.cn`），adapter 热身后按落地 `location.origin` 重算 base。**从中国境外 IP 访问 `.cn` 域名 DNS 偶发解析失败**（本机开发时 cartier.cn/vancleefarpels.cn 都时好时坏）——失败时该国本次优雅跳过，不影响其余 6 国；GitHub runner 上 .cn 通常可解析（卡地亚 CN 在 CI 成功过）。
+
 ## 7. 反爬通用经验（接新品牌先看）
 
 - 很多奢侈品站在 **Akamai Bot Manager** 后面，裸 HTTP（curl/requests）一律 403（响应体常含 `errors.edgesuite.net`）。用 **Playwright 真实浏览器**通常可绕过，且**数据中心 IP（含 GitHub runner）也行**，当前所有品牌**零代理**。
@@ -152,7 +164,7 @@ config/<brand>.yaml  ──(adapter 字段)──▶  src/brands/<adapter>.scrap
 
 ## 9. 自动化
 
-- **`weekly.yml`**：`schedule`（每周一 02:00 UTC = 北京时间周一 10:00）+ `workflow_dispatch`（手动）。**无 push 触发**。`permissions: contents: write`。一个 job 内：装依赖（`playwright install --with-deps chromium` **和** `playwright install chrome`，卡地亚需真实 Chrome）→ 顺序两组步骤：**先宝诗龙（抓取+提交），后卡地亚（抓取+提交）**，抓取/提交步骤都 `if: always()`，每组各自 `git add -f data/prices.db docs/data.json` 并 commit/push——**任一品牌失败不影响另一个已提交的数据**。`timeout-minutes: 60`。
+- **`weekly.yml`**：`schedule`（每周一 02:00 UTC = 北京时间周一 10:00）+ `workflow_dispatch`（手动）。**无 push 触发**。`permissions: contents: write`。一个 job 内：装依赖（`playwright install --with-deps chromium` **和** `playwright install chrome`，卡地亚/梵克需真实 Chrome）→ 顺序三组步骤：**宝诗龙 → 卡地亚 → 梵克雅宝**，每组「抓取+提交」都 `if: always()`、各自 `git pull --rebase --autostash` 后 `git add -f data/prices.db docs/data.json` 并 commit/push——**任一品牌失败不影响其他已提交的数据**。`timeout-minutes: 60`。
 - **`daily-fx.yml`**：`cron "0 2 * * 0,2,3,4,5,6"`（北京时间周二~周日 10:00，跳过周一因为周一汇率随抓取一起更新）+ 手动。轻量（只装 `requests`、不跑浏览器），跑 `python -m src.update_fx`，回写 `data/prices.db` + `docs/data.json`。
 - 合起来：**价格每周一抓一次**，**汇率每天更新一次**（覆盖所有品牌的最新 run）。
 - ⚠️ 全新仓库里光有 `workflow_dispatch` 不会注册工作流，需要一次含工作流文件的 push 才激活（已激活）。
