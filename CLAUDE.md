@@ -158,7 +158,10 @@ config/<brand>.yaml  ──(adapter 字段)──▶  src/brands/<adapter>.scrap
 - 货号 join 键 `AN[0-9]{6}` 级别（如 `AN860830`），**.com 与 CN 的 sku 格式一致，无需归一**。
 - 5 品类（canonical→中文）：rings 戒指 / necklaces 项链 / bracelets 手链 / earrings 耳环 / engagement-rings + wedding-bands（都标「婚戒」，自然并入卡地亚的婚戒）。cgid 来自 categories 目录树 API（跨 locale 共享）：rings 241473 / necklaces 241474 / bracelets 241480 / earrings 241475 / engagement-rings 241498 / wedding-bands 245590。CN 只抓 4 主品类（婚戒的 .cn 路径未确认；婚戒跨国对比由 .com 6 国提供）。
 - **坑**：本机对 bulgari.com 部分 locale 频繁 `ERR_HTTP2_PROTOCOL_ERROR` / 503（疑似多次探查被限速）——adapter 对每国按 `warm_slugs` 候选重试、捕获不到模板则优雅跳过；SCAPI token 有时效（guest token），单次 run 内有效。
-- **HK / KR 不是 SCAPI 电商店面（实测仅 5/7 国可抓）**：CI（稳定网络）实测 US/SG/JP/FR/CN 正常，**HK 是「展示型」SSR 站**（`/en-hk/jewellery/rings` 显示价 HK$，但**不发 product-search、无 `/product/` 链接、不可加购**），KR 类似/无店面。我的 SCAPI 路径拿不到它们。要补 HK/KR 需另写「DOM 抓取展示页」的第三条路径（HK 商品卡链接结构还和 .com 不同）——**待用户决定是否投入**。当前宝格丽稳定覆盖 5 国。
+- **KR 是 SCAPI（siteId=KR），HK 才是 SSR**（实测 6/7 国可抓，HK 暂不抓）：
+  - **KR 之前误判**：失败是 Playwright 连 `ko-kr` 的 `ERR_HTTP2_PROTOCOL_ERROR`（连接层）所致，不是没店面。`launch` 加 **`--disable-http2`** 后稳定；warm_slug 用韩文 **`주얼리/네크리스`**（반지=戒指、네크리스=项链）。→ US/SG/JP/KR/FR + CN 共 6 国走 SCAPI/Magento 正常。
+  - **HK 是「展示型」SSR 站**：`/en-hk/jewellery/rings` 显示价 HK$、HTML 里也有 AN 货号，但**不发 product-search 接口、商品不在 `/product/` 链接里、无内嵌 JSON**——SCAPI 路径取不到。要补 HK 需另写「解析 SSR HTML」的第三条路径（markup 不透明、偏脆）；**用户决定先不爬 HK**。
+- **货号归一 `_norm_ref`（重要，否则跨国对不上）**：宝格丽货号两类——字母前缀+数字（`AN852260`）与纯数字（`361995`）；各国接口会加装饰：US SCAPI 带系列前缀（`B-zero1-1-bands-AN852260`）、CN Magento 带变体后缀（`361995-E`）。归一规则：优先抽「字母(2-4)+数字(5+)」否则取纯数字(5+)，SCAPI/Magento 两路径都用。实测修复后 US∩CN 戒指重合 0→90。
 
 ## 7. 反爬通用经验（接新品牌先看）
 
