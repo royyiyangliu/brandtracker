@@ -59,6 +59,7 @@
   thead tr.groups th{position:sticky;top:0}
   thead tr.cols th{position:sticky;top:26px}
   td.txt,th.txt{text-align:left;white-space:normal}
+  td.nm,th.nm{max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   td.ref{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--muted)}
   .cat-chip{background:var(--chip);border-radius:5px;padding:1px 7px;font-size:11px}
   tbody tr:hover{background:#fbf8f2}
@@ -199,8 +200,8 @@ function buildHead(){
   let c = `<tr class="cols">
     <th class="txt" data-k="brand">品牌</th>
     <th class="txt" data-k="category">品类</th>`;
-  if(showUsName) c+=`<th class="txt" data-k="name_us">品名（美国）</th>`;
-  c+=`<th class="txt" data-k="name">品名</th>
+  if(showUsName) c+=`<th class="txt nm" data-k="name_us">品名（美国）</th>`;
+  c+=`<th class="txt nm" data-k="name">品名</th>
     <th class="txt" data-k="size">尺寸</th>
     <th class="txt" data-k="ref">货号</th>`;
   CNY.forEach((c2,i)=> c+=`<th class="${i===0?'sep':''}" data-k="cny:${c2}">${CSHORT[c2]}</th>`);
@@ -239,8 +240,8 @@ function render(){
     const minCny=Math.min(...Object.values(p.cny).filter(v=>v!=null).concat([Infinity]));
     let tds=`<td class="txt">${p.brand}</td>`+
             `<td class="txt"><span class="cat-chip">${p.category}</span></td>`+
-            (showUsName?`<td class="txt">${p.name_us||'<span class="muted">—</span>'}</td>`:``)+
-            `<td class="txt">${p.name||p.name_cn||'<span class="muted">—</span>'}</td>`+
+            (showUsName?`<td class="txt nm" title="${(p.name_us||'').replace(/"/g,'&quot;')}">${p.name_us||'<span class="muted">—</span>'}</td>`:``)+
+            `<td class="txt nm" title="${(p.name||p.name_cn||'').replace(/"/g,'&quot;')}">${p.name||p.name_cn||'<span class="muted">—</span>'}</td>`+
             `<td class="txt">${p.size||''}</td>`+
             `<td class="ref">${p.ref}</td>`;
     CNY.forEach((c,i)=>{
