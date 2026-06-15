@@ -157,7 +157,8 @@ config/<brand>.yaml  ──(adapter 字段)──▶  src/brands/<adapter>.scrap
   - CN：`bulgari.cn` 是 **Magento**。商品走 `…/rest/zh_cn/V4/catalog/layer?identifier=jewelry/{slug}&page=N&pageSize=100` → `data.productItems[]`（`sku`=货号、`priceNum`=价、`name`、`url`；`totalPages` 翻页）。无需鉴权。
 - 货号 join 键 `AN[0-9]{6}` 级别（如 `AN860830`），**.com 与 CN 的 sku 格式一致，无需归一**。
 - 5 品类（canonical→中文）：rings 戒指 / necklaces 项链 / bracelets 手链 / earrings 耳环 / engagement-rings + wedding-bands（都标「婚戒」，自然并入卡地亚的婚戒）。cgid 来自 categories 目录树 API（跨 locale 共享）：rings 241473 / necklaces 241474 / bracelets 241480 / earrings 241475 / engagement-rings 241498 / wedding-bands 245590。CN 只抓 4 主品类（婚戒的 .cn 路径未确认；婚戒跨国对比由 .com 6 国提供）。
-- **坑**：本机对 bulgari.com 部分 locale 频繁 `ERR_HTTP2_PROTOCOL_ERROR` / 503（疑似多次探查被限速）——adapter 对每国按 `warm_slugs` 候选重试、捕获不到模板则优雅跳过；GitHub runner 上更稳。SCAPI token 有时效（guest token），单次 run 内有效。
+- **坑**：本机对 bulgari.com 部分 locale 频繁 `ERR_HTTP2_PROTOCOL_ERROR` / 503（疑似多次探查被限速）——adapter 对每国按 `warm_slugs` 候选重试、捕获不到模板则优雅跳过；SCAPI token 有时效（guest token），单次 run 内有效。
+- **HK / KR 不是 SCAPI 电商店面（实测仅 5/7 国可抓）**：CI（稳定网络）实测 US/SG/JP/FR/CN 正常，**HK 是「展示型」SSR 站**（`/en-hk/jewellery/rings` 显示价 HK$，但**不发 product-search、无 `/product/` 链接、不可加购**），KR 类似/无店面。我的 SCAPI 路径拿不到它们。要补 HK/KR 需另写「DOM 抓取展示页」的第三条路径（HK 商品卡链接结构还和 .com 不同）——**待用户决定是否投入**。当前宝格丽稳定覆盖 5 国。
 
 ## 7. 反爬通用经验（接新品牌先看）
 
