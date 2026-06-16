@@ -134,7 +134,7 @@ config/<brand>.yaml  ──(adapter 字段)──▶  src/brands/<adapter>.scrap
   | 国家 | 平台 | adapter 路径 | 取数方式 |
   |---|---|---|---|
   | US, KR | SFCC/Demandware（老）| `_scrape_sfcc` | 热身后在页面内 `fetch` 网格接口 `…/Sites-Cartier{US/KR}-Site/{en_US/ko_KR}/Search-UpdateGrid?cgid={cgid}&prefn1=sapIsVisibleWeb&prefv1=true&start=0&sz=400`；解析返回 HTML 的 `.product-tile`（名 `.product-tile__name`、价 `.price`、货号 `a[href]` 取 `CR…`）。KR 无品类落地页，但 cgid 端点直接命中。 |
-  | SG, HK, JP, FR | Adobe AEM + Algolia（新；标志 `/libs/granite`、`/libs/cq`）| `_scrape_aem` | `goto` 品类页 `{landing}/jewellery/{slug}/`，**运行时拦截**该页发的 Algolia 列表请求拿到各国索引/集合名（不硬编码），把末段 limit 改 `.1000.json` 取全（`hits[].globalReference`=货号、`description`等=名）；价格自行构造 `{品类页路径}.productinfo.<ref-ref-…>.json`（每 20 个一批），取 `additionals.car.variants[].priceValue` 最小值；**单品款（如耳环）variants 为空，价格在顶层 `formattedPrice`**——必须 fallback 到顶层，否则该品类 0 价。 |
+  | SG, HK, JP, FR | Adobe AEM + Algolia（新；标志 `/libs/granite`、`/libs/cq`）| `_scrape_aem` | `goto` 品类页 `{landing}/jewellery/{slug}/`，**运行时拦截**该页发的 Algolia 列表请求拿到各国索引/集合名（不硬编码），把末段 limit 改 `.1000.json` 取全（`hits[].globalReference`=货号；取名优先 `productName`→`englishProductName`，**勿用 `description`/`shortDescription`——只是材质 blob**）；价格自行构造 `{品类页路径}.productinfo.<ref-ref-…>.json`（每 20 个一批），取 `additionals.car.variants[].priceValue` 最小值；**单品款（如耳环）variants 为空，价格在顶层 `formattedPrice`**——必须 fallback 到顶层，否则该品类 0 价。 |
   | CN | cartier.cn 中国特供站（cookie `cartier_session`/`XSRF-TOKEN`/`gdp_*`）| `_scrape_cn` | `goto` `…/jewellery/collection/{cn_slug}`，滚动到货号数稳定，解析卡片（货号 `a[href^="/creation/"]` 取 `B…`、名 `.works_name`/`a[title]`、价 `.works_price`）。 |
 
 - 价格解析 `parse_price`：按币种符号取数字（EUR 兼容符号在后）。AEM 的 `formattedPrice`（如 `￥737,000`）也走它。
@@ -168,7 +168,8 @@ config/<brand>.yaml  ──(adapter 字段)──▶  src/brands/<adapter>.scrap
 - 很多奢侈品站在 **Akamai Bot Manager** 后面，裸 HTTP（curl/requests）一律 403（响应体常含 `errors.edgesuite.net`）。用 **Playwright 真实浏览器**通常可绕过，且**数据中心 IP（含 GitHub runner）也行**，当前所有品牌**零代理**。
 - **自带 Chromium vs 真实 Chrome**：Akamai 严格度因站而异。宝诗龙自带 Chromium 即可；卡地亚部分店面识破自带 Chromium 的指纹 → 必须 `channel="chrome"` + 完整 client-hints 头。**接新品牌先两者都试**。
 - **geo/弹窗**：美国 IP 访问非美站可能弹「跳回美国」窗口或 geo 跳转——若走后端接口取数通常不受影响；中国站常把非中国 IP 跳转，但本地化深链接/接口多可直达。
-- **若未来某站开始 403**：在该 adapter 的 `launch`/`new_context` 加 `proxy=`，用仓库 Secret 注入住宅代理。
+- **随机间隔（已全量启用）**：高频爆发式访问易被 Akamai velocity 规则临时拉黑。共用 `src/brands/__init__.py` 的 `jitter(lo,hi)`，各 adapter 在**国家间停 4~9s、品类间停 1.5~3.5s**（宝诗龙品类间 2~4s）；JSON 接口批量循环不逐个加。整跑因此从 ~22 分钟增至 ~34 分钟（仍在 60 分钟 timeout 内）。
+- **若未来某站开始 403**：先加大 jitter；仍不行再在该 adapter 的 `launch`/`new_context` 加 `proxy=`，用仓库 Secret 注入住宅代理。
 
 ## 8. 前端（GitHub Pages）
 
