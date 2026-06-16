@@ -285,11 +285,14 @@ def _scrape_aem(page, brand, c, cats, aem_slugs) -> list[dict]:
             ref = h.get("globalReference")
             if not ref or not REF_RE.fullmatch(ref):
                 continue
-            # shortDescription 往往只是材质（"イエローゴールド"），用更完整的字段。
+            # productName 才是真正品名（"LOVE ring, classic model"）；description/
+            # shortDescription 只是材质 blob（"Product description: - 18K yellow gold…"），
+            # 不可当品名。优先 productName（HK/SG/FR 本就是英文，JP 为日文）→ englishProductName。
             name = (
-                h.get("description")
-                or h.get("shortDescriptionCommunication")
+                h.get("productName")
+                or h.get("englishProductName")
                 or " ".join(filter(None, [h.get("collectionProductLine"), h.get("productType")]))
+                or h.get("shortDescriptionCommunication")
                 or h.get("shortDescription")
                 or ""
             )
