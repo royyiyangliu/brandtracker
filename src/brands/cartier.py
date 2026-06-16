@@ -21,6 +21,8 @@ from dataclasses import dataclass, asdict
 
 from playwright.sync_api import sync_playwright
 
+from . import jitter
+
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
@@ -116,7 +118,9 @@ def _scrape_sfcc(page, brand, c, cats, cgids) -> list[dict]:
     page.goto(c["landing"], wait_until="domcontentloaded", timeout=60000)
     page.wait_for_timeout(3000)
     rows: list[dict] = []
-    for key, label in cats.items():
+    for i, (key, label) in enumerate(cats.items()):
+        if i:
+            jitter(1.5, 3.5)        # 品类之间随机停顿
         cgid = cgids.get(key)
         if not cgid:
             continue
@@ -186,7 +190,9 @@ def _scrape_cn(page, brand, c, cats, cn_slugs) -> list[dict]:
     page.goto(c["landing"], wait_until="domcontentloaded", timeout=60000)
     page.wait_for_timeout(3000)
     rows: list[dict] = []
-    for key, label in cats.items():
+    for i, (key, label) in enumerate(cats.items()):
+        if i:
+            jitter(1.5, 3.5)        # 品类之间随机停顿
         slug = cn_slugs.get(key)
         if not slug:
             continue
@@ -242,7 +248,9 @@ def _scrape_aem(page, brand, c, cats, aem_slugs) -> list[dict]:
     page.goto(base, wait_until="domcontentloaded", timeout=60000)
     page.wait_for_timeout(2500)
     rows: list[dict] = []
-    for key, label in cats.items():
+    for i, (key, label) in enumerate(cats.items()):
+        if i:
+            jitter(1.5, 3.5)        # 品类之间随机停顿
         slug = aem_slugs.get(key, key)
         cat_url = f"{base}/jewellery/{slug}/"
         # productinfo 路径 = 品类页路径 + ".productinfo.<refs>.json"，直接构造（不依赖拦截，
@@ -369,5 +377,6 @@ def scrape_brand(config: dict) -> list[dict]:
             except Exception as e:
                 print(f"  [{c['code']}] FATAL {type(e).__name__}: {str(e)[:90]}")
             ctx.close()
+            jitter(4, 9)                # 国家之间随机停顿
         browser.close()
     return results

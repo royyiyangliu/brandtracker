@@ -10,7 +10,15 @@
 """
 from __future__ import annotations
 
+import random
+import time
 from importlib import import_module
+
+
+def jitter(lo: float, hi: float) -> None:
+    """随机停顿 lo~hi 秒。在国家/品类等导航点之间调用，降低访问频率、规避反爬
+    velocity 规则（高频爆发易被 Akamai 临时拉黑，如卡地亚港站 403、宝格丽 SG 503）。"""
+    time.sleep(random.uniform(lo, hi))
 
 
 def get_adapter(config: dict):

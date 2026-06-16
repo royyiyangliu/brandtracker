@@ -18,6 +18,8 @@ from urllib.parse import quote
 
 from playwright.sync_api import sync_playwright
 
+from . import jitter
+
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
@@ -125,7 +127,9 @@ def _scrape_scapi(page, brand, c, cats, cgids) -> list[dict]:
     limit = int(lm.group(1)) if lm else 24
 
     rows: list[dict] = []
-    for key, label in cats.items():
+    for i, (key, label) in enumerate(cats.items()):
+        if i:
+            jitter(1.5, 3.5)        # 品类之间随机停顿
         cgid = cgids.get(key)
         if not cgid:
             continue
@@ -184,7 +188,9 @@ def _scrape_magento(page, brand, c, cats) -> list[dict]:
     page.wait_for_timeout(3000)
 
     rows: list[dict] = []
-    for key, label in cats.items():
+    for i, (key, label) in enumerate(cats.items()):
+        if i:
+            jitter(1.5, 3.5)        # 品类之间随机停顿
         path = cn_paths.get(key)
         if not path:
             continue
@@ -251,5 +257,6 @@ def scrape_brand(config: dict) -> list[dict]:
             except Exception as e:
                 print(f"  [{c['code']}] FATAL {type(e).__name__}: {str(e)[:90]}")
             ctx.close()
+            jitter(4, 9)                # 国家之间随机停顿
         browser.close()
     return results

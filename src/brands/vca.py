@@ -21,6 +21,8 @@ from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
+from . import jitter
+
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
@@ -181,7 +183,9 @@ def scrape_brand(config: dict) -> list[dict]:
                 # 落地后按实际 origin 重算 base：中国从 .com/cn/zh 跳转到 vancleefarpels.cn，
                 # 接口须用跳转后的 .cn 同源地址；其余国家 origin 不变、base 照旧。
                 eff_base = pg.evaluate("location.origin") + urlparse(base).path
-                for slug, label in cats.items():
+                for i, (slug, label) in enumerate(cats.items()):
+                    if i:
+                        jitter(1.5, 3.5)        # 品类之间随机停顿
                     try:
                         names = _collect_list(pg, eff_base, slug, cc)
                         prices = _collect_prices(pg, eff_base, cc, list(names), currency)
@@ -197,5 +201,6 @@ def scrape_brand(config: dict) -> list[dict]:
             except Exception as e:
                 print(f"  [{code}] FATAL {type(e).__name__}: {str(e)[:90]}")
             ctx.close()
+            jitter(4, 9)                # 国家之间随机停顿
         browser.close()
     return results

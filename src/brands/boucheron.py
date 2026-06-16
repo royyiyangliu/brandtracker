@@ -17,6 +17,8 @@ from dataclasses import dataclass, asdict
 
 from playwright.sync_api import sync_playwright
 
+from . import jitter
+
 UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -193,7 +195,8 @@ def scrape_brand(config: dict) -> list[dict]:
                 "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
             )
             page = ctx.new_page()
-            for t in (t for t in targets if t.country == code):
+            cat_targets = [t for t in targets if t.country == code]
+            for idx, t in enumerate(cat_targets):
                 try:
                     items = scrape_page(page, brand, t)
                     priced = sum(1 for i in items if i.local_price is not None)
@@ -201,6 +204,9 @@ def scrape_brand(config: dict) -> list[dict]:
                     results.extend(asdict(i) for i in items)
                 except Exception as e:
                     print(f"  [{code}/{t.category}] ERROR {type(e).__name__}: {str(e)[:90]}")
+                if idx < len(cat_targets) - 1:
+                    jitter(2, 4)        # 品类之间随机停顿
             ctx.close()
+            jitter(4, 9)                # 国家之间随机停顿
         browser.close()
     return results
